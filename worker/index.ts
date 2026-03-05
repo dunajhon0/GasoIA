@@ -8,7 +8,7 @@ import type { D1Database, ExecutionContext, ScheduledEvent } from '@cloudflare/w
 import { runCron } from './cron';
 import { summaryRoute } from './routes/summary';
 import { historyRoute } from './routes/history';
-import { citiesRoute } from './routes/cities';
+import { citiesRoute, top10CitiesRoute } from './routes/cities';
 import { fuelsRoute } from './routes/fuels';
 import { stationsRoute } from './routes/stations';
 import { brandsRoute } from './routes/brands';
@@ -38,6 +38,7 @@ app.use('/*', async (c, next) => {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.get('/summary', summaryRoute);
 app.get('/history', historyRoute);
+app.get('/cities/top10', top10CitiesRoute);
 app.get('/cities', citiesRoute);
 app.get('/fuels', fuelsRoute);
 app.get('/stations', stationsRoute);

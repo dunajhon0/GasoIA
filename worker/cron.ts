@@ -18,6 +18,7 @@ import {
     upsertBrandAggregate,
     type Fuel,
     type Scope,
+    type CityAggregate,
 } from './lib/db';
 
 const TOP_CITIES: Record<string, string> = {
@@ -99,24 +100,45 @@ export async function runCron(db: D1Database): Promise<void> {
         }
     }
 
-    // 5. City aggregates
-    for (const [rawCity] of Object.entries(TOP_CITIES)) {
-        // Match municipio containing city name (case-insensitive)
-        const cityStations = stations.filter(s =>
-            s.municipality.toUpperCase().includes(rawCity) ||
-            s.locality.toUpperCase().includes(rawCity)
-        );
-        if (cityStations.length === 0) continue;
+    // 5. City aggregates (ALL Cities)
+    const cityAggs = new Map<string, { city: string, province: string, sp95: number[], dieselA: number[] }>();
+    for (const s of stations) {
+        const key = `${s.municipality.toUpperCase()}|${s.province.toUpperCase()}`;
+        if (!cityAggs.has(key)) {
+            cityAggs.set(key, { city: s.municipality.toUpperCase(), province: s.province, sp95: [], dieselA: [] });
+        }
+        const c = cityAggs.get(key)!;
+        if (s.prices.sp95) c.sp95.push(s.prices.sp95);
+        if (s.prices.dieselA) c.dieselA.push(s.prices.dieselA);
+    }
 
-        const province = cityStations[0]?.province ?? '';
-        await upsertCityAggregate(db, {
+    const cityRecords: CityAggregate[] = [];
+    for (const agg of cityAggs.values()) {
+        if (agg.sp95.length === 0 && agg.dieselA.length === 0) continue;
+        cityRecords.push({
             date: today,
-            city: rawCity,
-            province,
-            sp95_avg: calcAvg(cityStations.map(s => s.prices.sp95)),
-            diesel_a_avg: calcAvg(cityStations.map(s => s.prices.dieselA)),
-            station_count: cityStations.length,
+            city: agg.city,
+            province: agg.province,
+            sp95_avg: calcAvg(agg.sp95),
+            diesel_a_avg: calcAvg(agg.dieselA),
+            station_count: Math.max(agg.sp95.length, agg.dieselA.length, 1), // Approximate
         });
+    }
+
+    // Batch upsert cities
+    const CHUNK_CITIES = 50;
+    for (let i = 0; i < cityRecords.length; i += CHUNK_CITIES) {
+        const batch = cityRecords.slice(i, i + CHUNK_CITIES);
+        const stmts = batch.map(agg =>
+            db.prepare(`
+                INSERT INTO city_aggregates (date, city, province, sp95_avg, diesel_a_avg, station_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(date, city) DO UPDATE SET
+                province=excluded.province, sp95_avg=excluded.sp95_avg,
+                diesel_a_avg=excluded.diesel_a_avg, station_count=excluded.station_count
+            `).bind(agg.date, agg.city, agg.province, agg.sp95_avg, agg.diesel_a_avg, agg.station_count)
+        );
+        await db.batch(stmts);
     }
 
     // 6. Brand aggregates

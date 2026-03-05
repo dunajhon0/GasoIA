@@ -145,13 +145,44 @@ export async function getFuelHistory(
     ).bind(fuel, days).all<{ date: string; avg_price: number | null }>()).results ?? [];
 }
 
-export async function getCityAggregatesForDate(
+export async function getCityAggregatesByNames(
     db: D1Database, date: string, cities: string[]
 ): Promise<CityAggregate[]> {
     const placeholders = cities.map(() => '?').join(',');
     return (await db.prepare(
         `SELECT * FROM city_aggregates WHERE date=? AND city IN (${placeholders})`
     ).bind(date, ...cities).all<CityAggregate>()).results ?? [];
+}
+
+export async function searchCityAggregates(
+    db: D1Database,
+    date: string,
+    params: { q?: string; sort?: string; order?: 'asc' | 'desc'; limit?: number; offset?: number }
+): Promise<{ items: CityAggregate[]; total: number }> {
+    const { q = '', sort = 'sp95_avg', order = 'asc', limit = 50, offset = 0 } = params;
+
+    let query = `FROM city_aggregates WHERE date=?`;
+    const bindValues: any[] = [date];
+
+    if (q) {
+        query += ` AND (city LIKE ? OR province LIKE ?)`;
+        bindValues.push(`%${q}%`, `%${q}%`);
+    }
+
+    // Count total
+    const totalRow = await db.prepare(`SELECT COUNT(*) as total ${query}`).bind(...bindValues).first<{ total: number }>();
+    const total = totalRow?.total ?? 0;
+
+    // Order and Page
+    const validSorts = ['city', 'province', 'sp95_avg', 'diesel_a_avg', 'station_count'];
+    const safeSort = validSorts.includes(sort) ? sort : 'sp95_avg';
+    const safeOrder = order === 'desc' ? 'DESC' : 'ASC';
+
+    const items = (await db.prepare(
+        `SELECT * ${query} ORDER BY ${safeSort} ${safeOrder} LIMIT ? OFFSET ?`
+    ).bind(...bindValues, limit, offset).all<CityAggregate>()).results ?? [];
+
+    return { items, total };
 }
 
 export async function getBrandAggregatesForDate(
