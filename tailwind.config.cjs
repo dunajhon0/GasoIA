@@ -40,14 +40,28 @@ module.exports = {
                 'slide-up': 'slideUp 0.4s ease-out',
                 'pulse-slow': 'pulse 3s infinite',
                 'shimmer': 'shimmer 1.5s infinite',
+                'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+                'scale-in': 'scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                'bounce-subtle': 'bounceSubtle 2s infinite',
             },
             keyframes: {
                 fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
                 slideUp: { from: { transform: 'translateY(16px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
+                scaleIn: { from: { transform: 'scale(0.95)', opacity: '0' }, to: { transform: 'scale(1)', opacity: '1' } },
+                shake: {
+                    '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                    '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                    '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                    '40%, 60%': { transform: 'translate3d(4px, 0, 0)' },
+                },
                 shimmer: {
                     '0%': { backgroundPosition: '-200% 0' },
                     '100%': { backgroundPosition: '200% 0' },
                 },
+                bounceSubtle: {
+                    '0%, 100%': { transform: 'translateY(-2%)' },
+                    '50%': { transform: 'translateY(0)' },
+                }
             },
             backgroundImage: {
                 'gradient-brand': 'linear-gradient(135deg, #10b981 0%, #2aa5ff 50%, #6366f1 100%)',

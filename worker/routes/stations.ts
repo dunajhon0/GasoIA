@@ -95,22 +95,30 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
 
     withDist.sort((a, b) => {
         if (sort === 'distance' && a.distKm !== undefined && b.distKm !== undefined) {
-            return (a.distKm - b.distKm) * mult;
+            if (a.distKm !== b.distKm) return (a.distKm - b.distKm) * mult;
+            // Tie-break by price
+            const fuelKey = (fuel || 'sp95') as keyof NormalizedStation['prices'];
+            const pa = (a.prices[fuelKey] ?? 999) as number;
+            const pb = (b.prices[fuelKey] ?? 999) as number;
+            if (pa !== pb) return pa - pb;
+            return a.id.localeCompare(b.id);
         }
 
         if (sort === 'brand') {
-            return a.brand.localeCompare(b.brand) * mult;
+            const cmp = a.brand.localeCompare(b.brand);
+            if (cmp !== 0) return cmp * mult;
+            return a.id.localeCompare(b.id);
         }
 
         if (sort === 'price') {
             const fuelKey = (fuel || 'sp95') as keyof NormalizedStation['prices'];
             const pa = a.prices[fuelKey] ?? (isAsc ? 999 : -1);
             const pb = b.prices[fuelKey] ?? (isAsc ? 999 : -1);
-            return ((pa as number) - (pb as number)) * mult;
+            if (pa !== pb) return ((pa as number) - (pb as number)) * mult;
+            return a.id.localeCompare(b.id);
         }
 
-        // Default or other sort types can be added here
-        return 0;
+        return a.id.localeCompare(b.id);
     });
 
     // ─── Pagination ────────────────────────────────────────────────────────────

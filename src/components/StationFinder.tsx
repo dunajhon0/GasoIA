@@ -1,5 +1,12 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+    getNavPreference,
+    setNavPreference as saveNavPref,
+    openNavigation as startNavigation,
+    NAV_PREF_KEY
+} from '../lib/navigation';
+import type { NavApp } from '../lib/navigation';
 
 interface Station {
     id: string;
@@ -33,6 +40,7 @@ type SortMode = 'price' | 'distance' | 'brand';
 type SortOrder = 'asc' | 'desc';
 
 const BRAND_LIST = ['Repsol', 'Cepsa', 'Moeve', 'BP', 'Shell', 'Galp', 'Plenoil', 'Ballenoil', 'Petroprix', 'Alcampo'];
+const RADIUS_OPTIONS = [2, 5, 10, 25, 50];
 
 function fmt(p: number | null): string {
     if (p === null) return '—';
@@ -53,6 +61,9 @@ export default function StationFinder() {
             sort: (params.get('sort') || 'price') as SortMode,
             order: (params.get('order') || 'asc') as SortOrder,
             page: parseInt(params.get('page') || '1', 10),
+            lat: params.get('lat') ? parseFloat(params.get('lat')!) : null,
+            lon: params.get('lon') ? parseFloat(params.get('lon')!) : null,
+            radius: params.get('radius') ? parseInt(params.get('radius')!, 10) : 10,
         };
     };
 
@@ -65,6 +76,10 @@ export default function StationFinder() {
     const [brand, setBrand] = useState(initial.brand || '');
     const [sort, setSort] = useState<SortMode>(initial.sort || 'price');
     const [order, setOrder] = useState<SortOrder>(initial.order || 'asc');
+    const [radius, setRadius] = useState(initial.radius || 10);
+    const [userPos, setUserPos] = useState<{ lat: number; lon: number } | null>(
+        initial.lat && initial.lon ? { lat: initial.lat, lon: initial.lon } : null
+    );
 
     const [stations, setStations] = useState<Station[]>([]);
     const [total, setTotal] = useState(0);
@@ -72,13 +87,23 @@ export default function StationFinder() {
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [userPos, setUserPos] = useState<{ lat: number; lon: number } | null>(null);
+    const [geoStatus, setGeoStatus] = useState<'idle' | 'requesting' | 'active' | 'denied'>(
+        initial.lat ? 'active' : 'idle'
+    );
+
     const [favorites, setFavorites] = useState<Set<string>>(() => {
         if (typeof window === 'undefined') return new Set();
         try { return new Set(JSON.parse(localStorage.getItem('fav-stations') ?? '[]')); } catch { return new Set(); }
     });
 
+    const [navTarget, setNavTarget] = useState<Station | null>(null);
+    const [navPref, setNavPref] = useState<NavApp | null>(getNavPreference());
+    const [rememberNav, setRememberNav] = useState(true);
+    const [nearestStation, setNearestStation] = useState<Station | null>(null);
+    const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
     const isFirstRender = useRef(true);
+    const resultsRef = useRef<HTMLDivElement>(null);
 
     const fetchStations = useCallback(async (isLoadMore = false) => {
         if (isLoadMore) setLoadingMore(true); else setLoading(true);
@@ -100,6 +125,7 @@ export default function StationFinder() {
             if (userPos) {
                 params.lat = String(userPos.lat);
                 params.lon = String(userPos.lon);
+                params.radius = String(radius);
             }
 
             const qs = new URLSearchParams(params).toString();
@@ -120,7 +146,7 @@ export default function StationFinder() {
             // Update URL
             if (typeof window !== 'undefined') {
                 const newQs = new URLSearchParams(params);
-                newQs.delete('pageSize'); // Hide pageSize if it's default
+                newQs.delete('pageSize');
                 if (!isLoadMore) newQs.delete('page');
                 const path = `${window.location.pathname}?${newQs.toString()}`;
                 window.history.replaceState({ path }, '', path);
@@ -131,9 +157,8 @@ export default function StationFinder() {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [query, city, province, fuel, brand, sort, order, page, userPos]);
+    }, [query, city, province, fuel, brand, sort, order, page, userPos, radius]);
 
-    // Search on changes (or triggered by button)
     const handleSearch = () => {
         setPage(1);
         fetchStations(false);
@@ -147,6 +172,9 @@ export default function StationFinder() {
         setBrand('');
         setSort('price');
         setOrder('asc');
+        setRadius(10);
+        setUserPos(null);
+        setGeoStatus('idle');
         setPage(1);
         if (typeof window !== 'undefined') {
             window.history.replaceState({}, '', window.location.pathname);
@@ -154,21 +182,73 @@ export default function StationFinder() {
     };
 
     const handleGeo = () => {
-        setLoading(true);
+        if (geoStatus === 'active') {
+            setUserPos(null);
+            setGeoStatus('idle');
+            setSort('price');
+            return;
+        }
+
+        setGeoStatus('requesting');
         navigator.geolocation.getCurrentPosition(
             pos => {
                 const lat = pos.coords.latitude, lon = pos.coords.longitude;
                 setUserPos({ lat, lon });
                 setSort('distance');
-                // We'll let the user click search after getting location
-                setLoading(false);
+                setGeoStatus('active');
+                setPage(1);
             },
             () => {
+                setGeoStatus('denied');
                 setError('No se pudo obtener la ubicación. Por favor, revisa los permisos.');
-                setLoading(false);
             },
             { timeout: 8000 }
         );
+    };
+
+    const handleFindNearest = () => {
+        setGeoStatus('requesting');
+        navigator.geolocation.getCurrentPosition(
+            async pos => {
+                const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                setUserPos({ lat, lon });
+                setSort('distance');
+                setGeoStatus('active');
+                setPage(1);
+
+                // Specifically fetch to find the nearest
+                try {
+                    const qs = new URLSearchParams({
+                        lat: String(lat),
+                        lon: String(lon),
+                        radius: '25',
+                        sort: 'distance',
+                        order: 'asc',
+                        pageSize: '1'
+                    }).toString();
+                    const res = await fetch(`/api/stations?${qs}`);
+                    const data = await res.json();
+                    if (data.items && data.items.length > 0) {
+                        setNearestStation(data.items[0]);
+                    }
+                } catch (e) {
+                    console.error("Error finding nearest:", e);
+                }
+            },
+            () => {
+                setGeoStatus('denied');
+                setError('No se pudo obtener la ubicación para encontrar la más cercana.');
+            }
+        );
+    };
+
+    const scrollToString = (id: string) => {
+        setHighlightedId(id);
+        const el = document.getElementById(`station-${id}`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        setTimeout(() => setHighlightedId(null), 3000);
     };
 
     // SEO & Page Title Update
@@ -189,25 +269,50 @@ export default function StationFinder() {
         }
     }, [city]);
 
-    // Initial load & Re-fetch on city change (from URL or clear button)
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
             fetchStations();
         } else {
-            // If city changes (e.g. from clear button), reset and fetch
             setPage(1);
             fetchStations(false);
         }
-    }, [city]); // city is now a dependency to trigger re-fetch
+    }, [city, userPos, radius, fuel, brand, sort, order]);
 
-    const toggleFav = (id: string) => {
+    const toggleFav = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
         setFavorites(prev => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id); else next.add(id);
             localStorage.setItem('fav-stations', JSON.stringify([...next]));
             return next;
         });
+    };
+
+    const openNavigation = (station: Station, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        if (!station.lat || !station.lon) {
+            setError('Esta gasolinera no tiene coordenadas válidas.');
+            return;
+        }
+        if (navPref) {
+            startNavigation(station.lat, station.lon, navPref);
+        } else {
+            setNavTarget(station);
+        }
+    };
+
+    const setAppPreference = (app: NavApp) => {
+        if (rememberNav) {
+            setNavPref(app);
+            saveNavPref(app);
+        }
+        if (navTarget) {
+            if (navTarget.lat && navTarget.lon) {
+                startNavigation(navTarget.lat, navTarget.lon, app);
+            }
+            setNavTarget(null);
+        }
     };
 
     return (
@@ -226,6 +331,7 @@ export default function StationFinder() {
                     </button>
                 </div>
             )}
+
             {/* Filter Panel */}
             <div className="card p-5 animate-slide-up">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -245,26 +351,27 @@ export default function StationFinder() {
                         </div>
                     </div>
 
-                    <div>
-                        <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Provincia</label>
-                        <input
-                            type="text"
-                            className="input w-full"
-                            placeholder="Ej: Madrid, Barcelona..."
-                            value={province}
-                            onChange={e => setProvince(e.target.value)}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Municipio</label>
-                        <input
-                            type="text"
-                            className="input w-full"
-                            placeholder="Ej: Getafe, Sabadell..."
-                            value={city}
-                            onChange={e => setCity(e.target.value)}
-                        />
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Provincia</label>
+                            <input
+                                type="text"
+                                className="input w-full"
+                                placeholder="Ej: Madrid..."
+                                value={province}
+                                onChange={e => setProvince(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Municipio</label>
+                            <input
+                                type="text"
+                                className="input w-full"
+                                placeholder="Ej: Sabadell..."
+                                value={city}
+                                onChange={e => setCity(e.target.value)}
+                            />
+                        </div>
                     </div>
 
                     <div>
@@ -291,8 +398,8 @@ export default function StationFinder() {
                         <div className="flex gap-2">
                             <select className="select flex-1" value={sort} onChange={e => setSort(e.target.value as SortMode)}>
                                 <option value="price">Precio más bajo</option>
-                                <option value="distance">Distancia</option>
                                 <option value="brand">Nombre Marca</option>
+                                {userPos && <option value="distance">Distancia</option>}
                             </select>
                             <button
                                 onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
@@ -304,9 +411,18 @@ export default function StationFinder() {
                         </div>
                     </div>
 
-                    <div className="flex items-end gap-2">
+                    {userPos && (
+                        <div>
+                            <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Radio de búsqueda</label>
+                            <select className="select w-full font-bold text-brand-500" value={radius} onChange={e => setRadius(parseInt(e.target.value, 10))}>
+                                {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} km</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className={`flex items-end gap-2 ${userPos ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
                         <button onClick={handleSearch} className="btn-primary flex-1 h-[42px]" disabled={loading}>
-                            {loading ? 'Buscando...' : 'Aplicar Filtros'}
+                            {loading ? 'Buscando...' : 'Buscar'}
                         </button>
                         <button onClick={handleReset} className="btn-secondary h-[42px]" title="Limpiar filtros">
                             ↺
@@ -315,12 +431,38 @@ export default function StationFinder() {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                    <button
-                        onClick={handleGeo}
-                        className={`text-sm flex items-center gap-2 transition-colors ${userPos ? 'text-indigo-500 font-semibold' : 'text-muted hover:text-indigo-500'}`}
-                    >
-                        {userPos ? '📍 Ubicación activada' : '📍 Usar mi ubicación para calcular distancias'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={handleGeo}
+                            disabled={geoStatus === 'requesting'}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${geoStatus === 'active'
+                                ? 'bg-brand-500 text-white border-brand-500 shadow-lg scale-105'
+                                : geoStatus === 'denied'
+                                    ? 'bg-red-50 text-red-500 border-red-200'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-500'
+                                }`}
+                        >
+                            {geoStatus === 'active' ? '📍 Cerca de mí activado' : geoStatus === 'requesting' ? '⌛ Solicitando...' : geoStatus === 'denied' ? '⚠️ Ubicación denegada' : '📍 Cerca de mí'}
+                        </button>
+
+                        <button
+                            onClick={handleFindNearest}
+                            disabled={geoStatus === 'requesting'}
+                            className="px-4 py-2 rounded-xl text-sm font-black uppercase tracking-tight bg-slate-900 dark:bg-brand-500 text-white shadow-xl hover:scale-105 transition-all flex items-center gap-2"
+                        >
+                            📍 Gasolinera más cerca de mí
+                        </button>
+
+                        {geoStatus === 'denied' && (
+                            <span className="text-[10px] text-muted max-w-[150px] leading-tight flex items-center gap-1">
+                                <span>⚠️ Activa el GPS para buscar por cercanía.</span>
+                                <button onClick={handleGeo} className="underline font-bold">Reintentar</button>
+                            </span>
+                        )}
+                        {geoStatus === 'active' && (
+                            <button onClick={() => { setUserPos(null); setGeoStatus('idle'); setNearestStation(null); }} className="text-xs font-bold text-red-500 hover:underline">Quitar ubicación</button>
+                        )}
+                    </div>
 
                     {total > 0 && (
                         <p className="text-sm text-muted">
@@ -332,16 +474,92 @@ export default function StationFinder() {
 
             {/* Error Message */}
             {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2 animate-shake">
                     <span>⚠️</span> {error}
                 </div>
             )}
 
+            {/* Nearest Station Hero */}
+            {nearestStation && (
+                <div className="animate-fade-in bg-gradient-to-r from-brand-50 to-brand-100 dark:from-slate-800 dark:to-slate-900 border-2 border-brand-500 p-6 rounded-3xl shadow-2xl mb-8 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <span className="text-8xl">📍</span>
+                    </div>
+                    <div className="relative z-10">
+                        <span className="inline-block px-3 py-1 bg-brand-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full mb-4 shadow-lg shadow-brand-500/30">
+                            ✨ ¡La gasolinera más cercana!
+                        </span>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter leading-none mb-2">
+                                    {nearestStation.name || nearestStation.brand}
+                                </h2>
+                                <p className="text-slate-600 dark:text-slate-400 font-bold flex items-center gap-2">
+                                    <span>🏙️</span> {nearestStation.address} ({nearestStation.municipality}, {nearestStation.province})
+                                </p>
+                                <div className="flex gap-4 mt-4">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-muted font-black uppercase tracking-widest">Distancia</span>
+                                        <span className="text-2xl font-black text-brand-500">{nearestStation.distKm?.toFixed(1)} <small className="text-sm">km</small></span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-muted font-black uppercase tracking-widest">Precio {fuel}</span>
+                                        <span className="text-2xl font-black text-slate-800 dark:text-white">{fmt(nearestStation.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof nearestStation.prices])}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={() => openNavigation(nearestStation)}
+                                    className="px-8 py-4 min-h-[44px] bg-brand-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-500/20 hover:scale-105 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                                >
+                                    🧭 Cómo llegar ahora
+                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (nearestStation.lat && nearestStation.lon) {
+                                                startNavigation(nearestStation.lat, nearestStation.lon, 'maps');
+                                            }
+                                        }}
+                                        className="p-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-md"
+                                        title="Abrir en Google Maps"
+                                    >
+                                        🗺️
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (nearestStation.lat && nearestStation.lon) {
+                                                startNavigation(nearestStation.lat, nearestStation.lon, 'waze');
+                                            }
+                                        }}
+                                        className="p-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-md"
+                                        title="Abrir en Waze"
+                                    >
+                                        🚙
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setNearestStation(null);
+                                        scrollToString(nearestStation.id);
+                                    }}
+                                    className="px-6 py-3 min-h-[44px] bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 border-slate-200 dark:border-slate-700 rounded-2xl font-black uppercase tracking-widest hover:border-brand-500 transition-all text-xs flex items-center justify-center gap-2"
+                                >
+                                    Ver en lista
+                                </button>
+                                <button onClick={() => setNearestStation(null)} className="text-xs font-bold text-muted hover:text-red-500 text-center px-2">Cerrar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Results */}
-            <div className="min-h-[400px] relative">
+            <div className="min-h-[400px] relative" ref={resultsRef}>
                 {loading && stations.length === 0 && (
                     <div className="grid grid-cols-1 gap-4">
-                        {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-32 w-full rounded-2xl" />)}
+                        {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-36 w-full rounded-2xl" />)}
                     </div>
                 )}
 
@@ -349,52 +567,99 @@ export default function StationFinder() {
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 gap-4">
                             {stations.map(s => (
-                                <div key={s.id} className="card p-5 flex flex-col sm:flex-row gap-5 hover:border-indigo-500/50 transition-colors group">
+                                <div
+                                    key={s.id}
+                                    id={`station-${s.id}`}
+                                    className={`card p-5 flex flex-col sm:flex-row gap-5 transition-all group ${highlightedId === s.id ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/30' : 'hover:border-brand-500'} hover:shadow-xl active:scale-[0.99]`}
+                                >
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2 mb-2">
                                             <div>
-                                                <h3 className="font-bold text-lg group-hover:text-indigo-500 transition-colors">{s.name || s.brand}</h3>
-                                                <p className="text-sm text-muted mt-0.5">{s.address}</p>
+                                                <h3 className="font-bold text-xl group-hover:text-brand-500 transition-colors uppercase tracking-tight">{s.name || s.brand}</h3>
+                                                <p className="text-sm text-muted mt-1 font-medium">{s.address}</p>
                                             </div>
-                                            <button
-                                                onClick={() => toggleFav(s.id)}
-                                                className={`text-2xl transition-all hover:scale-125 ${favorites.has(s.id) ? 'grayscale-0' : 'grayscale opacity-30 hover:opacity-100'}`}
-                                            >
-                                                ⭐
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={(e) => toggleFav(s.id, e)}
+                                                    className={`p-2 rounded-xl border transition-all ${favorites.has(s.id) ? 'bg-amber-50 border-amber-200 grayscale-0' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale opacity-40 hover:opacity-100'}`}
+                                                >
+                                                    ⭐
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted font-medium mt-3">
-                                            <span className="flex items-center gap-1">🏙️ {s.municipality}, {s.province}</span>
-                                            {s.schedule && <span className="flex items-center gap-1">🕐 {s.schedule}</span>}
+                                        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted font-bold mt-4">
+                                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🏙️ {s.municipality}</span>
+                                            {s.schedule && <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🕐 {s.schedule}</span>}
                                             {s.distKm !== null && (
-                                                <span className="flex items-center gap-1 text-indigo-500">📍 {s.distKm.toFixed(1)} km</span>
+                                                <span className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-600 rounded-lg">📍 {s.distKm.toFixed(1)} km</span>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-wrap sm:flex-nowrap gap-3 self-center">
-                                        {/* Main price highlighted if selected */}
-                                        {fuel && s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices] !== null && (
-                                            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-center min-w-[90px]">
-                                                <p className="text-[10px] font-bold text-indigo-500 uppercase">{fuel}</p>
-                                                <p className="text-xl font-black font-mono text-indigo-600 dark:text-indigo-400">
-                                                    {fmt(s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices])}
-                                                </p>
-                                            </div>
-                                        )}
+                                    <div className="flex flex-col gap-4 justify-center items-end min-w-[200px]">
+                                        <div className="flex flex-wrap sm:flex-nowrap gap-3 items-center w-full sm:w-auto">
+                                            {/* Main price highlighted if selected */}
+                                            {fuel && s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices] !== null && (
+                                                <div className="bg-brand-500 text-white rounded-xl px-5 py-3 text-center flex-1 sm:flex-none shadow-lg shadow-brand-500/20">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{fuel}</p>
+                                                    <p className="text-2xl font-black font-mono leading-none">
+                                                        {fmt(s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices])}
+                                                    </p>
+                                                </div>
+                                            )}
 
-                                        {/* Other prices compact */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {Object.entries(s.prices)
-                                                .filter(([key, val]) => val !== null && (fuel ? key !== fuel : true))
-                                                .slice(0, 4)
-                                                .map(([key, val]) => (
-                                                    <div key={key} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg px-2 py-1 text-center min-w-[60px] border border-transparent">
-                                                        <p className="text-[8px] font-bold text-muted uppercase">{key === 'dieselA' ? 'Dsl' : key}</p>
-                                                        <p className="text-[11px] font-bold font-mono">{fmt(val as number)}</p>
+                                            {/* Other prices compact */}
+                                            <div className="grid grid-cols-2 gap-2 flex-1 sm:flex-none">
+                                                {Object.entries(s.prices)
+                                                    .filter(([key, val]) => val !== null && (fuel ? key !== fuel : true))
+                                                    .slice(0, 2)
+                                                    .map(([key, val]) => (
+                                                        <div key={key} className="bg-slate-100 dark:bg-slate-800/80 rounded-xl px-3 py-1.5 text-center min-w-[70px] border border-transparent">
+                                                            <p className="text-[8px] font-black text-muted uppercase tracking-tighter">{key === 'dieselA' ? 'DSL A' : key}</p>
+                                                            <p className="text-xs font-black font-mono">{fmt(val as number)}</p>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        </div>
+                                        <div className="w-full sm:w-auto flex flex-col items-center sm:items-end gap-3">
+                                            <div className="flex w-full sm:w-auto gap-2">
+                                                <button
+                                                    onClick={(e) => openNavigation(s, e)}
+                                                    disabled={!s.lat || !s.lon}
+                                                    className={`flex-1 sm:flex-none px-6 py-2.5 min-h-[44px] rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand-500/10 ${!s.lat || !s.lon
+                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                        : 'bg-brand-500 text-white hover:scale-105 active:scale-95'
+                                                        }`}
+                                                >
+                                                    <span>🧭</span> {!s.lat || !s.lon ? 'Ubicación no disponible' : 'Cómo llegar'}
+                                                </button>
+
+                                                {s.lat && s.lon && (
+                                                    <div className="flex gap-1.5">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'maps'); }}
+                                                            className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
+                                                            title="Google Maps"
+                                                        >
+                                                            🗺️
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'waze'); }}
+                                                            className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
+                                                            title="Waze"
+                                                        >
+                                                            🚙
+                                                        </button>
                                                     </div>
-                                                ))}
+                                                )}
+                                            </div>
+
+                                            {navPref && (
+                                                <div className="hidden sm:block text-[8px] font-black text-muted uppercase tracking-widest opacity-60">
+                                                    Preferencia: {navPref === 'waze' ? '🚙 Waze' : '🗺️ Maps'}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -405,10 +670,10 @@ export default function StationFinder() {
                             <div className="pt-6 flex justify-center">
                                 <button
                                     onClick={() => fetchStations(true)}
-                                    className="btn-secondary px-8 py-3 font-semibold shadow-sm"
+                                    className="btn-secondary px-10 py-4 font-black uppercase tracking-widest bg-white dark:bg-slate-900 shadow-xl border-2 border-slate-200 dark:border-slate-800 hover:border-brand-500 transition-all"
                                     disabled={loadingMore}
                                 >
-                                    {loadingMore ? '⌛ Cargando más...' : `Cargar más gasolineras (${total - stations.length} restantes)`}
+                                    {loadingMore ? '⌛ Cargando...' : `Más gasolineras (${total - stations.length})`}
                                 </button>
                             </div>
                         )}
@@ -418,12 +683,83 @@ export default function StationFinder() {
                         <div className="text-6xl mb-4">🔍</div>
                         <h3 className="text-xl font-bold mb-2 text-slate-700 dark:text-slate-300">No hay resultados</h3>
                         <p>Intenta ajustar los filtros de búsqueda o cambia la ubicación.</p>
-                        <button onClick={handleReset} className="mt-6 text-indigo-500 font-semibold hover:underline">
+                        <button onClick={handleReset} className="mt-6 text-brand-500 font-bold hover:underline">
                             Limpiar todos los filtros
                         </button>
                     </div>
                 )}
             </div>
+
+            {/* Navigation Drawer / Modal */}
+            {navTarget && (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setNavTarget(null)}></div>
+                    <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
+                        <div className="p-6">
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight leading-tight">¿Cómo quieres llegar?</h3>
+                                    <p className="text-sm text-muted font-medium mt-1">{navTarget.name || navTarget.brand}</p>
+                                </div>
+                                <button onClick={() => setNavTarget(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-xl">✕</button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3">
+                                <button
+                                    onClick={() => setAppPreference('maps')}
+                                    className="flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-500 transition-all group"
+                                >
+                                    <span className="text-3xl">🗺️</span>
+                                    <div className="text-left">
+                                        <p className="font-bold text-slate-800 dark:text-white">Google Maps</p>
+                                        <p className="text-xs text-muted">Abre la aplicación de Google</p>
+                                    </div>
+                                    <span className="ml-auto text-brand-500 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setAppPreference('waze')}
+                                    className="flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-500 transition-all group"
+                                >
+                                    <span className="text-3xl">🚙</span>
+                                    <div className="text-left">
+                                        <p className="font-bold text-slate-800 dark:text-white">Waze</p>
+                                        <p className="text-xs text-muted">Navegación con tráfico real</p>
+                                    </div>
+                                    <span className="ml-auto text-brand-500 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                                </button>
+                            </div>
+
+                            <div className="mt-6 flex items-center justify-center gap-3">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={rememberNav}
+                                        onChange={e => setRememberNav(e.target.checked)}
+                                        className="w-5 h-5 rounded border-2 border-slate-300 dark:border-slate-600 text-brand-500 focus:ring-brand-500"
+                                    />
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest">Recordar mi elección</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {navPref && navTarget === null && (
+                <button
+                    onClick={() => { setNavPref(null); localStorage.removeItem(NAV_PREF_KEY); }}
+                    className="fixed bottom-6 right-6 z-50 bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-xs font-bold text-muted hover:text-brand-500 transition-all hover:scale-110 group animate-fade-in"
+                    title="Cambiar preferencia de mapas"
+                >
+                    <span className="text-xl group-hover:rotate-12 transition-transform">{navPref === 'maps' ? '🗺️' : '🚙'}</span>
+                    <div className="text-left leading-tight hidden sm:block">
+                        <p className="text-[10px] opacity-70 uppercase tracking-tighter">App favorita</p>
+                        <p>{navPref === 'maps' ? 'Google Maps' : 'Waze'}</p>
+                    </div>
+                    <span className="ml-1 opacity-40">✕</span>
+                </button>
+            )}
         </div >
     );
 }
