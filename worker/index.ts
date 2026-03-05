@@ -22,13 +22,13 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use('/api/*', cors({
-    origin: ['https://gasoia.com', 'http://localhost:4321', 'http://localhost:8788'],
+app.use('/*', cors({
+    origin: ['https://gasoia.com', 'https://gasoia.dunajhon.com', 'http://localhost:4321', 'http://localhost:8788'],
     allowMethods: ['GET', 'OPTIONS'],
 }));
 
 // Rate limit: simple KV-based (or just rely on CF's built-in)
-app.use('/api/*', async (c, next) => {
+app.use('/*', async (c, next) => {
     const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
     // Simple header check — actual rate limit via Cloudflare Rules in production
     c.header('X-RateLimit-Limit', '120');
@@ -36,15 +36,15 @@ app.use('/api/*', async (c, next) => {
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-app.get('/api/summary', summaryRoute);
-app.get('/api/history', historyRoute);
-app.get('/api/cities/top10', citiesRoute);
-app.get('/api/fuels/table', fuelsRoute);
-app.get('/api/stations/search', stationsRoute);
-app.get('/api/brands', brandsRoute);
+app.get('/summary', summaryRoute);
+app.get('/history', historyRoute);
+app.get('/cities/top10', citiesRoute);
+app.get('/fuels/table', fuelsRoute);
+app.get('/stations/search', stationsRoute);
+app.get('/brands', brandsRoute);
 
 // Health check
-app.get('/api/health', (c) => c.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/health', (c) => c.json({ status: 'ok', ts: new Date().toISOString() }));
 
 // 404 fallback for API
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
