@@ -3,6 +3,10 @@ main = "worker/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "gasoia.dunajhon.com/api/*", zone_name = "dunajhon.com" }
+]
+
 [triggers]
 crons = ["0 6 * * *"]
 
