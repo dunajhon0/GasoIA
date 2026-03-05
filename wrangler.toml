@@ -9,7 +9,7 @@ crons = ["0 6 * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "gasoia-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "5e4221ca-69e4-4c71-bf21-154395364b1f"
 
 [vars]
 ADSENSE_PUBLISHER_ID = ""
