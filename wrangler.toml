@@ -13,10 +13,10 @@ database_id = "5e4221ca-69e4-4c71-bf21-154395364b1f"
 
 [vars]
 ADSENSE_PUBLISHER_ID = ""
-SITE_URL = "https://gasoia.com"
+  SITE_URL = "https://gasoia.dunajhon.com"
 
 [env.production]
 name = "gasoia-worker"
 
   [env.production.vars]
-  SITE_URL = "https://gasoia.com"
+  SITE_URL = "https://gasoia.dunajhon.com"
