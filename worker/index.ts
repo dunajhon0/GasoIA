@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { cache } from 'hono/cache';
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, ExecutionContext, ScheduledEvent } from '@cloudflare/workers-types';
 import { runCron } from './cron';
 import { summaryRoute } from './routes/summary';
 import { historyRoute } from './routes/history';
@@ -51,7 +51,15 @@ app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 export default {
-    fetch: app.fetch,
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+        const url = new URL(request.url);
+        if (url.pathname === "/api") url.pathname = "/";
+        if (url.pathname.startsWith("/api/")) {
+            url.pathname = url.pathname.slice("/api".length);
+            request = new Request(url.toString(), request);
+        }
+        return app.fetch(request, env, ctx);
+    },
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
         ctx.waitUntil(runCron(env.DB));
     },
