@@ -5,11 +5,21 @@ import Footer from '../components/Footer.astro';
 import StationFinder from '../components/StationFinder';
 
 export const prerender = false;
+const cityParam = Astro.url.searchParams.get('city');
+const cityName = cityParam ? (cityParam.charAt(0).toUpperCase() + cityParam.slice(1).toLowerCase()) : '';
+
+const title = cityName 
+  ? `Gasolineras en ${cityName} hoy | Precio gasolina – GasoIA`
+  : "Buscador de gasolineras baratas cerca de mí – GasoIA";
+
+const description = cityName
+  ? `Consulta las gasolineras más baratas en ${cityName} hoy. Precios actualizados de gasolina 95 y gasóleo A en tiempo real.`
+  : "Encuentra las gasolineras más baratas cerca de tu ubicación o en cualquier ciudad de España. Precios actualizados hoy. Filtra por combustible y marca.";
 ---
 
 <Layout
-  title="Buscador de gasolineras baratas cerca de mí – GasoIA"
-  description="Encuentra las gasolineras más baratas cerca de tu ubicación o en cualquier ciudad de España. Precios actualizados hoy. Filtra por combustible y marca."
+  title={title}
+  description={description}
 >
   <Navbar slot="navbar" />
 

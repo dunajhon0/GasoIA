@@ -27,31 +27,33 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
         return c.json({ error: 'Failed to fetch station data' }, 503);
     }
 
+    const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
     // ─── Filter ────────────────────────────────────────────────────────────────
     let filtered = stations;
 
     if (q) {
-        const qLow = q.toLowerCase();
+        const qNorm = normalize(q);
         filtered = filtered.filter(s =>
-            s.address.toLowerCase().includes(qLow) ||
-            s.municipality.toLowerCase().includes(qLow) ||
-            s.locality.toLowerCase().includes(qLow) ||
-            s.brand.toLowerCase().includes(qLow) ||
+            normalize(s.address).includes(qNorm) ||
+            normalize(s.municipality).includes(qNorm) ||
+            normalize(s.locality).includes(qNorm) ||
+            normalize(s.brand).includes(qNorm) ||
             s.postalCode.includes(q)
         );
     }
 
     if (city) {
-        const cLow = city.toLowerCase();
+        const cNorm = normalize(city);
         filtered = filtered.filter(s =>
-            s.municipality.toLowerCase().includes(cLow) ||
-            s.locality.toLowerCase().includes(cLow)
+            normalize(s.municipality).includes(cNorm) ||
+            normalize(s.locality).includes(cNorm)
         );
     }
 
     if (province) {
-        const pLow = province.toLowerCase();
-        filtered = filtered.filter(s => s.province.toLowerCase().includes(pLow));
+        const pNorm = normalize(province);
+        filtered = filtered.filter(s => normalize(s.province).includes(pNorm));
     }
 
     if (brand) {

@@ -195,16 +195,16 @@ async function loadDashboard() {
     const citiesEl = document.getElementById('cities-preview');
     if (citiesEl && cities?.cities) {
       citiesEl.innerHTML = cities.cities.map((c: any) => `
-        <div class="card p-4 flex flex-col justify-between hover:border-brand-400 transition-colors animate-fade-in">
+        <a href="/gasolineras?city=${encodeURIComponent(c.city)}" class="card p-4 flex flex-col justify-between hover:border-brand-400 transition-colors animate-fade-in group">
           <div>
             <div class="flex items-start justify-between mb-2">
-              <h3 class="font-bold text-base leading-tight">${c.city}</h3>
+              <h3 class="font-bold text-base leading-tight group-hover:text-brand-500 transition-colors">${c.city}</h3>
               <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-muted uppercase tracking-tighter">${c.stationCount} ⛽</span>
             </div>
             <p class="text-[10px] text-muted font-medium mb-3 uppercase tracking-wider">📍 ${c.province}</p>
           </div>
           
-          <div class="space-y-2">
+          <div class="space-y-2 mb-4">
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted font-medium">Gasolina 95</span>
               <span class="font-mono font-bold text-indigo-600 dark:text-indigo-400">${c.sp95 != null ? c.sp95.toFixed(3) + '€' : '—'}</span>
@@ -214,7 +214,11 @@ async function loadDashboard() {
               <span class="font-mono font-bold text-amber-600 dark:text-amber-400">${c.dieselA != null ? c.dieselA.toFixed(3) + '€' : '—'}</span>
             </div>
           </div>
-        </div>
+
+          <div class="text-[11px] font-bold text-brand-500 flex items-center gap-1 group-hover:gap-2 transition-all">
+            Ver estaciones <span>→</span>
+          </div>
+        </a>
       `).join('');
     }
   } catch (e) {

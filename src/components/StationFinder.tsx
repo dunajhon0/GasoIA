@@ -171,12 +171,35 @@ export default function StationFinder() {
         );
     };
 
+    // SEO & Page Title Update
+    useEffect(() => {
+        if (!typeof window) return;
+        const baseTitle = "Buscador de gasolineras baratas cerca de mí – GasoIA";
+        const baseDesc = "Encuentra las gasolineras más baratas cerca de tu ubicación o en cualquier ciudad de España. Precios actualizados hoy. Filtra por combustible y marca.";
+
+        if (city) {
+            const cityName = city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
+            document.title = `Gasolineras en ${cityName} hoy | Precio gasolina – GasoIA`;
+            const metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc) metaDesc.setAttribute('content', `Consulta las gasolineras más baratas en ${cityName} hoy. Precios actualizados de gasolina 95 y gasóleo A.`);
+        } else {
+            document.title = baseTitle;
+            const metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc) metaDesc.setAttribute('content', baseDesc);
+        }
+    }, [city]);
+
+    // Initial load & Re-fetch on city change (from URL or clear button)
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
             fetchStations();
+        } else {
+            // If city changes (e.g. from clear button), reset and fetch
+            setPage(1);
+            fetchStations(false);
         }
-    }, [fetchStations]);
+    }, [city]); // city is now a dependency to trigger re-fetch
 
     const toggleFav = (id: string) => {
         setFavorites(prev => {
@@ -189,6 +212,20 @@ export default function StationFinder() {
 
     return (
         <div className="space-y-6">
+            {/* Results Title (Dynamic) */}
+            {city && (
+                <div className="flex items-center justify-between gap-4 animate-fade-in">
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">
+                        Gasolineras en <span className="text-brand-500">{city}</span>
+                    </h2>
+                    <button
+                        onClick={() => { setCity(''); }}
+                        className="text-xs font-bold text-muted hover:text-red-500 transition-colors flex items-center gap-1"
+                    >
+                        ✕ Quitar filtro ciudad
+                    </button>
+                </div>
+            )}
             {/* Filter Panel */}
             <div className="card p-5 animate-slide-up">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

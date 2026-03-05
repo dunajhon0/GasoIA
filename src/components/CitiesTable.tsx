@@ -187,16 +187,27 @@ export default function CitiesTable() {
                                 <tr key={`${c.city}-${c.province}`} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
                                     <td className="px-4 py-3 text-muted text-xs font-mono">{i + 1}</td>
                                     <td className="px-4 py-3">
-                                        <div className="font-bold text-slate-700 dark:text-slate-200">{c.city}</div>
+                                        <a
+                                            href={`/gasolineras?city=${encodeURIComponent(c.city)}`}
+                                            className="font-bold text-slate-700 dark:text-slate-200 hover:text-brand-500 transition-colors"
+                                        >
+                                            {c.city}
+                                        </a>
                                         <div className="sm:hidden text-[10px] text-muted font-medium uppercase tracking-wider">{c.province}</div>
                                     </td>
                                     <td className="px-4 py-3 hidden sm:table-cell text-muted">{c.province}</td>
                                     <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{fmt(c.sp95)}</td>
                                     <td className="px-4 py-3 font-mono font-bold text-amber-600 dark:text-amber-400">{fmt(c.dieselA)}</td>
-                                    <td className="px-4 py-3 text-center sm:text-left">
+                                    <td className="px-4 py-3 flex items-center justify-between gap-2">
                                         <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-muted">
                                             {c.stationCount}
                                         </span>
+                                        <a
+                                            href={`/gasolineras?city=${encodeURIComponent(c.city)}`}
+                                            className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-brand-500 hover:underline"
+                                        >
+                                            Ver estaciones →
+                                        </a>
                                     </td>
                                 </tr>
                             ))}
