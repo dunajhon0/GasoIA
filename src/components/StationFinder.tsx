@@ -35,6 +35,43 @@ interface ApiResult {
     items: Station[];
 }
 
+interface PriceSnapshot {
+    [stationId: string]: {
+        [fuelCode: string]: {
+            price: number;
+            updatedAt: string;
+            meta: {
+                name: string;
+                address: string;
+                brand: string;
+                lat: number | null;
+                lon: number | null;
+                municipality: string;
+            }
+        }
+    }
+}
+
+interface PriceChange {
+    id: string; // unique for list
+    stationId: string;
+    fuelCode: string;
+    oldPrice: number;
+    newPrice: number;
+    delta: number;
+    direction: 'up' | 'down';
+    detectedAt: string;
+    viewed: boolean;
+    meta: {
+        name: string;
+        address: string;
+        brand: string;
+        lat: number | null;
+        lon: number | null;
+        municipality: string;
+    }
+}
+
 type FuelFilter = 'sp95' | 'dieselA' | 'sp98' | 'glp' | 'gnc' | '';
 type SortMode = 'price' | 'distance' | 'brand';
 type SortOrder = 'asc' | 'desc';
@@ -102,6 +139,18 @@ export default function StationFinder() {
     const [nearestStation, setNearestStation] = useState<Station | null>(null);
     const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
+    // Alerts state
+    const [priceChanges, setPriceChanges] = useState<PriceChange[]>(() => {
+        if (typeof window === 'undefined') return [];
+        try { return JSON.parse(localStorage.getItem('gasoia:favPriceChanges') ?? '[]'); } catch { return []; }
+    });
+    const [showChangesModal, setShowChangesModal] = useState(false);
+    const [onlyFavorites, setOnlyFavorites] = useState(false);
+    const [lastViewedAt, setLastViewedAt] = useState<string>(() => {
+        if (typeof window === 'undefined') return new Date().toISOString();
+        return localStorage.getItem('gasoia:favChangesLastViewedAt') ?? new Date().toISOString();
+    });
+
     const isFirstRender = useRef(true);
     const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +170,10 @@ export default function StationFinder() {
                 page: isLoadMore ? page + 1 : 1,
                 pageSize: '24'
             };
+
+            if (onlyFavorites && favorites.size > 0) {
+                params.ids = Array.from(favorites).join(',');
+            }
 
             if (userPos) {
                 params.lat = String(userPos.lat);
@@ -157,7 +210,7 @@ export default function StationFinder() {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [query, city, province, fuel, brand, sort, order, page, userPos, radius]);
+    }, [query, city, province, fuel, brand, sort, order, page, userPos, radius, onlyFavorites, favorites]);
 
     const handleSearch = () => {
         setPage(1);
@@ -195,7 +248,6 @@ export default function StationFinder() {
                 const lat = pos.coords.latitude, lon = pos.coords.longitude;
                 setUserPos({ lat, lon });
                 setSort('distance');
-                setGeoStatus('active');
                 setPage(1);
             },
             () => {
@@ -206,6 +258,114 @@ export default function StationFinder() {
         );
     };
 
+    const refreshFavorites = useCallback(async () => {
+        if (favorites.size === 0) return;
+        try {
+            const idsStr = Array.from(favorites).join(',');
+            const res = await fetch(`/api/stations/by-ids?ids=${idsStr}&fuel=${fuel}`);
+            if (!res.ok) return;
+            const data: ApiResult = await res.json();
+            detectPriceChanges(data.items);
+        } catch (e) {
+            console.error('Error refreshing favorites', e);
+        }
+    }, [favorites, fuel]);
+
+    const detectPriceChanges = useCallback((updatedStations: Station[]) => {
+        const snapshots: PriceSnapshot = JSON.parse(localStorage.getItem('gasoia:favPriceSnapshot') ?? '{}');
+        const newChanges: PriceChange[] = [...priceChanges];
+        let hasNewChange = false;
+
+        updatedStations.forEach(s => {
+            if (!favorites.has(s.id)) return;
+
+            const fuelsToCheck: FuelFilter[] = ['sp95', 'dieselA', 'sp98'];
+
+            fuelsToCheck.forEach(f => {
+                const currentPrice = s.prices[f as keyof typeof s.prices];
+                if (currentPrice === null || currentPrice <= 0) return;
+
+                const prev = snapshots[s.id]?.[f];
+                if (prev && Math.abs(currentPrice - prev.price) > 0.001) {
+                    const direction = currentPrice > prev.price ? 'up' : 'down';
+
+                    const lastChange = newChanges.find(c => c.stationId === s.id && c.fuelCode === f);
+                    if (lastChange && lastChange.newPrice === currentPrice) return;
+
+                    newChanges.unshift({
+                        id: `${s.id}-${f}-${Date.now()}`,
+                        stationId: s.id,
+                        fuelCode: f,
+                        oldPrice: prev.price,
+                        newPrice: currentPrice,
+                        delta: currentPrice - prev.price,
+                        direction,
+                        detectedAt: new Date().toISOString(),
+                        viewed: false,
+                        meta: {
+                            name: s.name,
+                            address: s.address,
+                            brand: s.brand,
+                            lat: s.lat,
+                            lon: s.lon,
+                            municipality: s.municipality
+                        }
+                    });
+                    hasNewChange = true;
+                }
+
+                if (!snapshots[s.id]) snapshots[s.id] = {};
+                snapshots[s.id][f] = {
+                    price: currentPrice,
+                    updatedAt: new Date().toISOString(),
+                    meta: {
+                        name: s.name,
+                        address: s.address,
+                        brand: s.brand,
+                        lat: s.lat,
+                        lon: s.lon,
+                        municipality: s.municipality
+                    }
+                };
+            });
+        });
+
+        if (hasNewChange) {
+            const trimmed = newChanges.slice(0, 50);
+            setPriceChanges(trimmed);
+            localStorage.setItem('gasoia:favPriceChanges', JSON.stringify(trimmed));
+        }
+        localStorage.setItem('gasoia:favPriceSnapshot', JSON.stringify(snapshots));
+    }, [favorites, priceChanges]);
+
+    useEffect(() => {
+        if (stations.length > 0) {
+            detectPriceChanges(stations);
+        }
+    }, [stations, detectPriceChanges]);
+
+    useEffect(() => {
+        const interval = setInterval(refreshFavorites, 15 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [refreshFavorites]);
+
+    useEffect(() => {
+        refreshFavorites();
+    }, []);
+
+    const clearHistory = () => {
+        setPriceChanges([]);
+        localStorage.removeItem('gasoia:favPriceChanges');
+    };
+
+    const markAllViewed = () => {
+        const now = new Date().toISOString();
+        setLastViewedAt(now);
+        localStorage.setItem('gasoia:favChangesLastViewedAt', now);
+        setPriceChanges(prev => prev.map(c => ({ ...c, viewed: true })));
+    };
+
+    const unseenCount = priceChanges.filter(c => c.detectedAt > lastViewedAt).length;
     const handleFindNearest = () => {
         setGeoStatus('requesting');
         navigator.geolocation.getCurrentPosition(
@@ -277,7 +437,7 @@ export default function StationFinder() {
             setPage(1);
             fetchStations(false);
         }
-    }, [city, userPos, radius, fuel, brand, sort, order]);
+    }, [city, userPos, radius, fuel, brand, sort, order, onlyFavorites]);
 
     const toggleFav = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -462,6 +622,31 @@ export default function StationFinder() {
                         {geoStatus === 'active' && (
                             <button onClick={() => { setUserPos(null); setGeoStatus('idle'); setNearestStation(null); }} className="text-xs font-bold text-red-500 hover:underline">Quitar ubicación</button>
                         )}
+
+                        <button
+                            onClick={() => setOnlyFavorites(!onlyFavorites)}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${onlyFavorites
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-lg'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-500'
+                                }`}
+                        >
+                            ⭐ {onlyFavorites ? 'Ver todas' : 'Solo favoritas'}
+                        </button>
+
+                        <button
+                            onClick={() => { setShowChangesModal(true); markAllViewed(); }}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2 relative ${unseenCount > 0
+                                ? 'bg-indigo-500 text-white border-indigo-500 shadow-indigo-500/20 shadow-lg animate-pulse'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-500'
+                                }`}
+                        >
+                            🔔 Cambios
+                            {unseenCount > 0 && (
+                                <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-slate-900">
+                                    {unseenCount}
+                                </span>
+                            )}
+                        </button>
                     </div>
 
                     {total > 0 && (
@@ -759,6 +944,94 @@ export default function StationFinder() {
                     </div>
                     <span className="ml-1 opacity-40">✕</span>
                 </button>
+            )}
+
+            {/* Changes Modal */}
+            {showChangesModal && (
+                <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowChangesModal(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">🔔</span>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Cambios de precios</h3>
+                                        <p className="text-xs text-muted font-bold uppercase tracking-widest mt-0.5">Alertas en tus gasolineras favoritas</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowChangesModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">✕</button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {priceChanges.length === 0 ? (
+                                <div className="py-12 text-center">
+                                    <p className="text-4xl mb-3">📭</p>
+                                    <p className="text-slate-500 font-bold">No hay cambios registrados en tus favoritas.</p>
+                                    <p className="text-xs text-muted mt-1 uppercase tracking-widest">Las alertas aparecerán cuando detectemos variaciones.</p>
+                                </div>
+                            ) : (
+                                priceChanges.map(change => (
+                                    <div key={change.id} className={`p-4 rounded-2xl border-2 transition-all flex flex-col sm:flex-row items-center gap-4 ${change.direction === 'down' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 ${change.direction === 'down' ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-red-500 text-white shadow-lg shadow-red-500/30'}`}>
+                                            {change.direction === 'down' ? '📉' : '📈'}
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-center sm:text-left">
+                                            <p className="font-black text-slate-800 uppercase truncate leading-tight">{change.meta.name}</p>
+                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{change.meta.address} · {change.meta.brand}</p>
+                                            <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
+                                                <span className="px-2 py-0.5 bg-white dark:bg-slate-800 rounded-md text-[10px] font-black uppercase tracking-tighter border border-slate-100 dark:border-slate-700">{change.fuelCode}</span>
+                                                <span className="text-xs font-black text-slate-500 mt-0.5">{new Date(change.detectedAt).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-center sm:items-end shrink-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-slate-400 line-through">{change.oldPrice.toFixed(3)}€</span>
+                                                <span className={`text-xl font-black font-mono ${change.direction === 'down' ? 'text-green-600' : 'text-red-600'}`}>{change.newPrice.toFixed(3)}€</span>
+                                            </div>
+                                            <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mt-1 ${change.direction === 'down' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                                                {change.direction === 'down' ? '-' : '+'}{Math.abs(change.delta).toFixed(3)}€/L
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-row sm:flex-col gap-2 shrink-0">
+                                            <button
+                                                onClick={() => { setShowChangesModal(false); scrollToString(change.stationId); }}
+                                                className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-white text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 hover:border-brand-500 transition-all whitespace-nowrap"
+                                            >
+                                                Ver
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const s = { ...change.meta, id: change.stationId } as any;
+                                                    openNavigation(s);
+                                                }}
+                                                className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all whitespace-nowrap"
+                                            >
+                                                Ir
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between gap-4">
+                            <button
+                                onClick={clearHistory}
+                                className="px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all uppercase tracking-widest"
+                            >
+                                Borrar historial
+                            </button>
+                            <button
+                                onClick={() => setShowChangesModal(false)}
+                                className="px-8 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div >
     );

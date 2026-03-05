@@ -42,6 +42,7 @@ app.get('/cities/top10', top10CitiesRoute);
 app.get('/cities', citiesRoute);
 app.get('/fuels', fuelsRoute);
 app.get('/stations', stationsRoute);
+app.get('/stations/by-ids', stationsRoute);
 app.get('/brands', brandsRoute);
 
 // Health check

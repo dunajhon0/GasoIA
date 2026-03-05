@@ -10,6 +10,7 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
     const q = c.req.query('q') ?? '';
     const city = c.req.query('city') ?? '';
     const province = c.req.query('province') ?? '';
+    const ids = c.req.query('ids') ?? '';
     const latQ = c.req.query('lat');
     const lonQ = c.req.query('lon');
     const radiusQ = c.req.query('radius');
@@ -66,6 +67,11 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
             const val = s.prices[fuel as keyof typeof s.prices];
             return val !== null && (val as number) > 0;
         });
+    }
+
+    if (ids) {
+        const idSet = new Set(ids.split(',').map(id => id.trim()));
+        filtered = filtered.filter(s => idSet.has(s.id));
     }
 
     // ─── Geo filter ────────────────────────────────────────────────────────────
