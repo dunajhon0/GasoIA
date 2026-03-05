@@ -1,0 +1,43 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Navbar from '../../components/Navbar.astro';
+import Footer from '../../components/Footer.astro';
+
+export const prerender = true;
+---
+<Layout title="Política de cookies – GasoIA" description="Información sobre las cookies usadas en GasoIA.">
+  <Navbar slot="navbar" />
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 section prose dark:prose-invert animate-fade-in">
+    <h1>Política de Cookies</h1>
+
+    <h2>¿Qué son las cookies?</h2>
+    <p>Las cookies son pequeños archivos que se almacenan en tu dispositivo cuando visitas un sitio web.</p>
+
+    <h2>Cookies que usamos</h2>
+    <table>
+      <thead><tr><th>Cookie</th><th>Tipo</th><th>Duración</th><th>Finalidad</th></tr></thead>
+      <tbody>
+        <tr><td><code>theme</code></td><td>Técnica</td><td>Permanente</td><td>Guardar preferencia de tema</td></tr>
+        <tr><td><code>cookie-consent</code></td><td>Técnica</td><td>Permanente</td><td>Guardar tu elección de consentimiento</td></tr>
+        <tr><td><code>fav-stations</code></td><td>Técnica</td><td>Permanente</td><td>Gasolineras favoritas</td></tr>
+        <tr><td>_ga, _gid</td><td>Analítica</td><td>2 años / 24h</td><td>Google Analytics (con consentimiento)</td></tr>
+        <tr><td>adsbygoogle</td><td>Publicidad</td><td>Variable</td><td>Google AdSense (con consentimiento)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Control de cookies</h2>
+    <p>Puedes gestionar tu consentimiento en cualquier momento pulsando este botón:</p>
+    <button id="reset-consent" class="btn-secondary mt-2">Restablecer preferencias de cookies</button>
+
+    <h2>Más información</h2>
+    <p>Consulta la <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Política de privacidad de Google</a> para los servicios de Google.</p>
+  </div>
+  <Footer slot="footer" />
+</Layout>
+
+<script>
+  document.getElementById('reset-consent')?.addEventListener('click', () => {
+    localStorage.removeItem('cookie-consent');
+    location.reload();
+  });
+</script>

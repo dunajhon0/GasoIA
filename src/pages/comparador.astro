@@ -1,0 +1,93 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+
+export const prerender = false;
+---
+
+<Layout
+  title="Comparador de precios por ciudad – GasoIA"
+  description="Compara el precio de la gasolina entre dos ciudades españolas. Ve las diferencias de precio en tiempo real."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Comparador de ciudades ⚖️</h1>
+    <p class="section-subtitle">Compara el precio de la gasolina entre dos ciudades.</p>
+
+    <div class="card p-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+        <div>
+          <label class="block text-sm font-semibold mb-2" for="city-a">Ciudad A</label>
+          <input id="city-a" type="text" class="input" placeholder="Ej: Madrid" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2" for="city-b">Ciudad B</label>
+          <input id="city-b" type="text" class="input" placeholder="Ej: Barcelona" />
+        </div>
+      </div>
+      <button id="compare-btn" class="btn-primary">Comparar</button>
+    </div>
+
+    <div id="compare-result" class="mt-6 hidden">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+        <div id="city-a-card" class="card p-5 text-center"></div>
+        <div class="text-center text-4xl font-bold text-muted">vs</div>
+        <div id="city-b-card" class="card p-5 text-center"></div>
+      </div>
+      <div id="compare-diff" class="card-flat p-4 text-center mt-4 text-sm"></div>
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</Layout>
+
+<script>
+const btn = document.getElementById('compare-btn');
+btn?.addEventListener('click', async () => {
+  const a = (document.getElementById('city-a') as HTMLInputElement)?.value.trim();
+  const b = (document.getElementById('city-b') as HTMLInputElement)?.value.trim();
+  if (!a || !b) return;
+
+  btn.textContent = '⌛ Buscando…';
+  try {
+    const [ra, rb] = await Promise.all([
+      fetch(`/api/stations/search?q=${encodeURIComponent(a)}&limit=200`).then(r => r.json()),
+      fetch(`/api/stations/search?q=${encodeURIComponent(b)}&limit=200`).then(r => r.json()),
+    ]);
+    const avg = (stations: {prices:{sp95:number|null;dieselA:number|null}}[]) => {
+      const sp95 = stations.map(s=>s.prices?.sp95).filter(Boolean) as number[];
+      const d    = stations.map(s=>s.prices?.dieselA).filter(Boolean) as number[];
+      const mean = (arr: number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+      return { sp95: mean(sp95), diesel: mean(d) };
+    };
+    const avgA = avg(ra.stations ?? []);
+    const avgB = avg(rb.stations ?? []);
+    const fmt  = (p: number|null) => p?.toFixed(3) + ' €' ?? '—';
+
+    const renderCard = (city: string, data: typeof avgA) => `
+      <h3 class="font-bold text-lg mb-3">${city}</h3>
+      <p class="text-2xl font-mono font-bold text-indigo-500">${fmt(data.sp95)}</p>
+      <p class="text-xs text-muted mb-2">Gasolina 95</p>
+      <p class="text-2xl font-mono font-bold text-amber-500">${fmt(data.diesel)}</p>
+      <p class="text-xs text-muted">Gasóleo A</p>
+    `;
+
+    document.getElementById('city-a-card')!.innerHTML = renderCard(a, avgA);
+    document.getElementById('city-b-card')!.innerHTML = renderCard(b, avgB);
+
+    const diffSp95 = (avgA.sp95 && avgB.sp95) ? (avgA.sp95 - avgB.sp95) : null;
+    const cheaper  = diffSp95 != null ? (diffSp95 < 0 ? a : diffSp95 > 0 ? b : 'ambas igual') : '—';
+    document.getElementById('compare-diff')!.innerHTML = diffSp95 != null
+      ? `<b>${cheaper}</b> tiene la gasolina 95 más barata en <b>${Math.abs(diffSp95).toFixed(4)} €/L</b>.`
+      : 'No hay suficientes datos para comparar.';
+
+    document.getElementById('compare-result')!.classList.remove('hidden');
+  } catch {
+    document.getElementById('compare-diff')!.textContent = 'Error al buscar datos.';
+    document.getElementById('compare-result')!.classList.remove('hidden');
+  }
+  btn.textContent = 'Comparar';
+});
+</script>

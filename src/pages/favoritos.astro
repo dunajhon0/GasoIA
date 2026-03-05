@@ -1,0 +1,86 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+
+export const prerender = false;
+---
+
+<Layout
+  title="Mis gasolineras favoritas – GasoIA"
+  description="Consulta tus gasolineras guardadas como favoritas con sus precios actuales."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Mis favoritas ⭐</h1>
+    <p class="section-subtitle">Gasolineras que marcaste como favoritas. Se guardan en tu dispositivo.</p>
+
+    <div id="favs-container">
+      <div class="card-flat p-10 text-center text-muted">
+        <p class="text-4xl mb-3">⭐</p>
+        <p>Cargando favoritas…</p>
+      </div>
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</Layout>
+
+<script>
+async function loadFavorites() {
+  const container = document.getElementById('favs-container')!;
+  let ids: string[] = [];
+  try { ids = JSON.parse(localStorage.getItem('fav-stations') ?? '[]'); } catch {}
+
+  if (ids.length === 0) {
+    container.innerHTML = `<div class="card-flat p-10 text-center text-muted">
+      <p class="text-4xl mb-3">☆</p>
+      <p>No tienes gasolineras favoritas aún.</p>
+      <p class="text-sm mt-2">Usa el buscador de gasolineras y pulsa ☆ para añadir.</p>
+      <a href="/gasolineras" class="btn-primary inline-flex mt-4">Buscar gasolineras</a>
+    </div>`;
+    return;
+  }
+
+  // Fetch all stations with no filter, find by id
+  try {
+    const res = await fetch('/api/stations/search?limit=50');
+    const json = await res.json();
+    const all: {id:string;name:string;brand:string;address:string;municipality:string;prices:{sp95:number|null;dieselA:number|null}}[] = json.stations ?? [];
+    const favs = all.filter(s => ids.includes(s.id));
+    if (favs.length === 0) {
+      container.innerHTML = `<div class="card-flat p-8 text-center text-muted">
+        <p>No se encontraron datos para tus gasolineras favoritas.</p>
+        <button onclick="localStorage.removeItem('fav-stations');location.reload()" class="btn-secondary mt-4 text-sm">Limpiar favoritos</button>
+      </div>`;
+      return;
+    }
+    container.innerHTML = favs.map(s => `
+      <div class="card p-4 mb-3 flex items-center justify-between gap-4">
+        <div>
+          <h3 class="font-semibold">${s.name || s.brand}</h3>
+          <p class="text-sm text-muted">${s.address}, ${s.municipality}</p>
+        </div>
+        <div class="flex gap-3 shrink-0">
+          ${s.prices.sp95    != null ? `<div class="text-center"><p class="text-xs text-muted">SP95</p><p class="font-mono font-bold text-indigo-500">${s.prices.sp95.toFixed(3)}€</p></div>` : ''}
+          ${s.prices.dieselA != null ? `<div class="text-center"><p class="text-xs text-muted">Diesel</p><p class="font-mono font-bold text-amber-500">${s.prices.dieselA.toFixed(3)}€</p></div>` : ''}
+          <button onclick="removeFav('${s.id}')" class="text-muted hover:text-red-500 transition-colors text-lg" title="Quitar de favoritos">✕</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    container.innerHTML = '<p class="text-muted text-center py-8">Error al cargar datos.</p>';
+  }
+}
+
+(window as any).removeFav = (id: string) => {
+  let ids: string[] = [];
+  try { ids = JSON.parse(localStorage.getItem('fav-stations') ?? '[]'); } catch {}
+  ids = ids.filter(i => i !== id);
+  localStorage.setItem('fav-stations', JSON.stringify(ids));
+  loadFavorites();
+};
+
+loadFavorites();
+</script>

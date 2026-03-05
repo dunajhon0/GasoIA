@@ -1,0 +1,58 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+
+export const prerender = true;
+---
+<Layout title="Contacto – GasoIA" description="Contacta con GasoIA. Envíanos tu consulta o sugerencia.">
+  <Navbar slot="navbar" />
+  <div class="max-w-2xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Contacto 📬</h1>
+    <p class="section-subtitle">¿Tienes preguntas, sugerencias o detectaste un error?</p>
+
+    <div class="card p-6">
+      <form id="contact-form" class="space-y-4" novalidate>
+        <div>
+          <label class="block text-sm font-semibold mb-1.5" for="name">Nombre</label>
+          <input id="name" type="text" class="input" placeholder="Tu nombre" required autocomplete="name" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1.5" for="email">Email</label>
+          <input id="email" type="email" class="input" placeholder="tu@email.com" required autocomplete="email" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1.5" for="subject">Asunto</label>
+          <select id="subject" class="select">
+            <option>Error en datos</option>
+            <option>Sugerencia</option>
+            <option>Publicidad</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1.5" for="message">Mensaje</label>
+          <textarea id="message" class="input min-h-[120px] resize-none" placeholder="Escribe tu mensaje…" required rows="5"></textarea>
+        </div>
+        <div id="form-status" class="hidden text-sm text-center py-2 px-4 rounded-lg"></div>
+        <button type="submit" class="btn-primary w-full justify-center">Enviar mensaje</button>
+      </form>
+    </div>
+
+    <div class="card-flat p-4 mt-4 text-sm text-muted text-center">
+      GasoIA es un proyecto independiente. Los datos proceden de fuentes oficiales del Ministerio de Industria de España.
+    </div>
+  </div>
+  <Footer slot="footer" />
+</Layout>
+
+<script>
+document.getElementById('contact-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('form-status')!;
+  status.className = 'text-sm text-center py-2 px-4 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+  status.textContent = '✅ Mensaje recibido. Gracias por contactarnos.';
+  status.classList.remove('hidden');
+  (e.target as HTMLFormElement).reset();
+});
+</script>

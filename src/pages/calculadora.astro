@@ -1,0 +1,49 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+import TripCalculator from '../components/TripCalculator';
+
+export const prerender = false;
+
+// Server-side fetch for initial summary data
+let summary: { sp95?: { today: number | null }; dieselA?: { today: number | null } } | null = null;
+try {
+  const apiUrl = import.meta.env.SITE_URL ?? 'https://gasoia.com';
+  const res = await fetch(`${apiUrl}/api/summary`);
+  if (res.ok) summary = await res.json();
+} catch {}
+---
+
+<Layout
+  title="Calculadora de coste de viaje – GasoIA"
+  description="Calcula cuánto te costará el combustible en tu próximo viaje. Introduce kilómetros, consumo y precio del carburante para obtener el coste total."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Calculadora de viaje 🧮</h1>
+    <p class="section-subtitle">
+      Calcula el coste de un viaje en función del precio actual de los carburantes.
+    </p>
+
+    <TripCalculator summary={summary} client:load />
+
+    <!-- Tips -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+      {[
+        { icon: '💡', title: 'Precio medio actual', text: 'Usa el precio medio oficial del Ministerio para calcular el coste real.' },
+        { icon: '⚡', title: 'Tu precio real', text: 'Introduce el precio que pagas habitualmente para comparar con la media.' },
+        { icon: '🔋', title: 'Consumo del vehículo', text: 'Puedes usar presets (Eco 5L, medio 8L, SUV 10L) o introducir el tuyo.' },
+      ].map(tip => (
+        <div class="card-flat p-4">
+          <p class="text-2xl mb-2" aria-hidden="true">{tip.icon}</p>
+          <h3 class="font-semibold text-sm mb-1">{tip.title}</h3>
+          <p class="text-xs text-muted leading-relaxed">{tip.text}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</Layout>

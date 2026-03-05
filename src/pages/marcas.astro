@@ -1,0 +1,36 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+import BrandChart from '../components/BrandChart';
+
+export const prerender = false;
+
+let nationalAvg: { sp95: number|null; dieselA: number|null } | null = null;
+try {
+  const apiUrl = import.meta.env.SITE_URL ?? 'https://gasoia.com';
+  const res = await fetch(`${apiUrl}/api/summary`);
+  if (res.ok) {
+    const json = await res.json();
+    nationalAvg = { sp95: json.sp95?.today ?? null, dieselA: json.dieselA?.today ?? null };
+  }
+} catch {}
+---
+
+<Layout
+  title="Ranking marcas de gasolineras en España – GasoIA"
+  description="Compara los precios de Gasolina 95 y Gasóleo A por marca: Repsol, Cepsa, BP, Shell, Alcampo, Petroprix, Plenoil, Ballenoil, Galp y más."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Ranking de marcas 🏷️</h1>
+    <p class="section-subtitle">
+      Precio medio de Gasolina 95 y Gasóleo A por marca hoy. Ordenado de más barato a más caro.
+    </p>
+
+    <BrandChart nationalAvg={nationalAvg} client:load />
+  </div>
+
+  <Footer slot="footer" />
+</Layout>

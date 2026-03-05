@@ -1,0 +1,38 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+import CitiesTable from '../components/CitiesTable';
+
+export const prerender = false;
+
+let cities: { city: string; province: string; sp95: number|null; dieselA: number|null; stationCount: number }[] = [];
+try {
+  const apiUrl = import.meta.env.SITE_URL ?? 'https://gasoia.com';
+  const res = await fetch(`${apiUrl}/api/cities/top10`);
+  if (res.ok) {
+    const json = await res.json();
+    cities = json.cities ?? [];
+  }
+} catch {}
+---
+
+<Layout
+  title="Precio gasolina por ciudad en España – GasoIA"
+  description="Consulta el precio medio de la Gasolina 95 y el Gasóleo A en las 10 ciudades más grandes de España. Datos actualizados hoy."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Precios por ciudad 🏙️</h1>
+    <p class="section-subtitle">Precio medio hoy de Gasolina 95 y Gasóleo A en las principales ciudades de España.</p>
+
+    <CitiesTable cities={cities} loading={false} client:load />
+
+    <p class="text-xs text-muted mt-4">
+      Nota: los precios corresponden a la media de las gasolineras registradas en cada municipio. Datos del Ministerio de Industria.
+    </p>
+  </div>
+
+  <Footer slot="footer" />
+</Layout>

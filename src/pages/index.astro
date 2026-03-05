@@ -1,0 +1,203 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+import PriceCard from '../components/PriceCard';
+import CookieBanner from '../components/CookieBanner';
+
+export const prerender = false;
+---
+
+<Layout
+  title="GasoIA – Precios de carburantes en España"
+  description="Precio oficial de la gasolina y el gasóleo en España. Datos del Ministerio actualizados cada día. Buscador de gasolineras, histórico y calculadora."
+>
+  <Navbar slot="navbar" />
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
+      <div class="absolute -top-24 -left-24 w-96 h-96 rounded-full blur-3xl opacity-20" style="background:radial-gradient(circle, #10b981, transparent)"></div>
+      <div class="absolute -top-24 right-0 w-96 h-96 rounded-full blur-3xl opacity-15" style="background:radial-gradient(circle, #6366f1, transparent)"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-12 pb-8">
+      <!-- Header -->
+      <div class="text-center mb-10 animate-fade-in">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-5"
+          style="background:rgba(42,165,255,0.12);color:#2aa5ff;border:1px solid rgba(42,165,255,0.25)">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span>
+          Datos oficiales · Actualización automática diaria
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold mb-3 leading-tight">
+          Precios de carburantes
+          <span class="gradient-text block sm:inline"> en España hoy</span>
+        </h1>
+        <p class="text-lg text-muted max-w-xl mx-auto">
+          Fuente oficial del Ministerio de Industria. Sin intermediarios, sin scraping.
+        </p>
+      </div>
+
+      <!-- Price cards (loaded client-side) -->
+      <div id="price-cards" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-2xl mx-auto">
+        <div class="card p-5 sm:p-6">
+          <div class="skeleton h-5 w-24 mb-3"></div>
+          <div class="skeleton h-9 w-32 mb-2"></div>
+          <div class="skeleton h-4 w-20"></div>
+        </div>
+        <div class="card p-5 sm:p-6">
+          <div class="skeleton h-5 w-24 mb-3"></div>
+          <div class="skeleton h-9 w-32 mb-2"></div>
+          <div class="skeleton h-4 w-20"></div>
+        </div>
+      </div>
+
+      <!-- Last updated + disclaimer -->
+      <p id="last-updated" class="text-center text-xs text-muted mb-10">Cargando datos…</p>
+
+      <!-- Quick links -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto animate-slide-up">
+        {[
+          { href: '/gasolineras', icon: '📍', label: 'Gasolineras cercanas' },
+          { href: '/calculadora', icon: '🧮', label: 'Calcular viaje' },
+          { href: '/historico',   icon: '📈', label: 'Ver histórico' },
+          { href: '/combustibles',icon: '⛽', label: 'Todos los combustibles' },
+        ].map(item => (
+          <a href={item.href} class="card p-4 text-center hover:border-brand-400 transition-colors group">
+            <span class="text-2xl block mb-1 group-hover:scale-110 transition-transform" aria-hidden="true">{item.icon}</span>
+            <span class="text-xs font-medium text-muted group-hover:text-brand-500">{item.label}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Top Cities preview -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 section">
+    <h2 class="section-title">Precios por ciudad <a href="/ciudades" class="text-sm font-normal text-brand-500 ml-2">Ver todas →</a></h2>
+    <p class="section-subtitle">Precio medio hoy de Gasolina 95 en las principales ciudades</p>
+    <div id="cities-preview" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {Array(10).fill(null).map(() => (
+        <div class="card-flat p-3 text-center">
+          <div class="skeleton h-4 w-16 mx-auto mb-2"></div>
+          <div class="skeleton h-6 w-20 mx-auto"></div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <!-- Mini-sparkline section for brands -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 pb-12">
+    <h2 class="section-title">Acceso rápido <a href="/marcas" class="text-sm font-normal text-brand-500 ml-2">Ver marcas →</a></h2>
+    <div class="flex flex-wrap gap-2">
+      {['Repsol','Cepsa','BP','Shell','Alcampo','Petroprix','Plenoil','Galp'].map(brand => (
+        <a
+          href={`/gasolineras?brand=${brand}`}
+          class="badge bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 hover:bg-brand-500/10 hover:text-brand-500 transition-colors px-3 py-1.5 rounded-full text-sm font-medium"
+        >
+          {brand}
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</Layout>
+
+<!-- Cookie Banner -->
+<CookieBanner client:load />
+
+<script>
+async function loadDashboard() {
+  try {
+    const [summaryRes, citiesRes, histSp95Res] = await Promise.all([
+      fetch('/api/summary'),
+      fetch('/api/cities/top10'),
+      fetch('/api/history?fuel=sp95&days=30'),
+    ]);
+    const summary = summaryRes.ok ? await summaryRes.json() : null;
+    const cities  = citiesRes.ok  ? await citiesRes.json() : null;
+    const histSp95= histSp95Res.ok? await histSp95Res.json() : null;
+
+    // ── Price cards ──────────────────────────────────────────────────────────
+    const cardsEl = document.getElementById('price-cards');
+    if (cardsEl && summary) {
+      const sp95 = summary.sp95;
+      const diesel = summary.dieselA;
+      const sparkPoints = (histSp95?.series ?? []).map((s: {date:string;price:number}) => s.price);
+
+      const fmtPrice = (p: number | null) => p != null ? p.toFixed(3) + ' €/L' : '—';
+      const fmtDelta = (d: number | null, pct: number | null) => {
+        if (d == null) return '';
+        const sign = d > 0 ? '+' : '';
+        return `${sign}${d.toFixed(4)} € (${sign}${(pct ?? 0).toFixed(2)}%)`;
+      };
+      const deltaClass = (d: number | null) => d == null ? '' : d > 0 ? 'price-up' : d < 0 ? 'price-down' : 'price-even';
+      const spark = (pts: number[], color: string) => {
+        if (pts.length < 2) return '';
+        const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1;
+        const w = 80, h = 36;
+        const poly = pts.map((p, i) => {
+          const x = (i / (pts.length - 1)) * w;
+          const y = h - ((p - min) / range) * (h * 0.85);
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${poly}"/></svg>`;
+      };
+
+      const sp95Color = '#6366f1', dieselColor = '#f59e0b';
+      cardsEl.innerHTML = `
+        <div class="card p-5 sm:p-6 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-2xl">⛽</span>
+              <span class="font-semibold text-sm text-muted">Gasolina 95 (SP95)</span>
+            </div>
+            ${spark(sparkPoints, sp95Color)}
+          </div>
+          <div>
+            <p class="text-3xl font-bold font-mono">${fmtPrice(sp95?.today)}</p>
+            <p class="text-xs text-muted mt-0.5">Ayer: <span class="font-medium">${fmtPrice(sp95?.yesterday)}</span></p>
+          </div>
+          ${sp95?.delta != null ? `<div class="flex items-center gap-1.5 text-sm font-semibold ${deltaClass(sp95.delta)}"><span>${sp95.delta > 0 ? '▲' : sp95.delta < 0 ? '▼' : '→'}</span><span>${fmtDelta(sp95.delta, sp95.deltaPct)}</span></div>` : ''}
+          <p class="text-xs text-muted">${sp95?.count ? sp95.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
+        </div>
+        <div class="card p-5 sm:p-6 flex flex-col gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">🚛</span>
+            <span class="font-semibold text-sm text-muted">Gasóleo A (Diesel)</span>
+          </div>
+          <div>
+            <p class="text-3xl font-bold font-mono">${fmtPrice(diesel?.today)}</p>
+            <p class="text-xs text-muted mt-0.5">Ayer: <span class="font-medium">${fmtPrice(diesel?.yesterday)}</span></p>
+          </div>
+          ${diesel?.delta != null ? `<div class="flex items-center gap-1.5 text-sm font-semibold ${deltaClass(diesel.delta)}"><span>${diesel.delta > 0 ? '▲' : diesel.delta < 0 ? '▼' : '→'}</span><span>${fmtDelta(diesel.delta, diesel.deltaPct)}</span></div>` : ''}
+          <p class="text-xs text-muted">${diesel?.count ? diesel.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
+        </div>
+      `;
+    }
+
+    // ── Last updated ────────────────────────────────────────────────────────
+    const updEl = document.getElementById('last-updated');
+    if (updEl && summary) {
+      const d = new Date(summary.updatedAt);
+      updEl.textContent = `Última actualización: ${d.toLocaleString('es-ES')} · Datos oficiales del Ministerio de Industria`;
+    }
+
+    // ── Cities preview ──────────────────────────────────────────────────────
+    const citiesEl = document.getElementById('cities-preview');
+    if (citiesEl && cities?.cities) {
+      citiesEl.innerHTML = cities.cities.map((c: {city:string;sp95:number|null}) => `
+        <a href="/ciudades" class="card-flat p-3 text-center hover:border-brand-400 transition-colors">
+          <p class="text-xs font-semibold text-muted mb-1">${c.city}</p>
+          <p class="text-base font-bold font-mono text-indigo-600 dark:text-indigo-400">${c.sp95 != null ? c.sp95.toFixed(3) + '€' : '—'}</p>
+        </a>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Dashboard load error:', e);
+  }
+}
+
+loadDashboard();
+</script>

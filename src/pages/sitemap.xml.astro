@@ -1,0 +1,33 @@
+---
+// Dynamic sitemap
+export const prerender = true;
+
+const pages = [
+  { url: '/',             priority: '1.0', changefreq: 'daily'   },
+  { url: '/historico',    priority: '0.9', changefreq: 'daily'   },
+  { url: '/gasolineras',  priority: '0.9', changefreq: 'daily'   },
+  { url: '/calculadora',  priority: '0.8', changefreq: 'monthly' },
+  { url: '/ciudades',     priority: '0.8', changefreq: 'daily'   },
+  { url: '/combustibles', priority: '0.8', changefreq: 'daily'   },
+  { url: '/marcas',       priority: '0.7', changefreq: 'daily'   },
+  { url: '/comparador',   priority: '0.6', changefreq: 'monthly' },
+  { url: '/legal/privacidad', priority: '0.3', changefreq: 'yearly' },
+  { url: '/legal/cookies',    priority: '0.3', changefreq: 'yearly' },
+  { url: '/legal/terminos',   priority: '0.3', changefreq: 'yearly' },
+  { url: '/contacto',         priority: '0.4', changefreq: 'yearly' },
+];
+
+const siteUrl = 'https://gasoia.com';
+const today = new Date().toISOString().slice(0, 10);
+
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages.map(p => `  <url>
+    <loc>${siteUrl}${p.url}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${p.changefreq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+---
+{sitemap}

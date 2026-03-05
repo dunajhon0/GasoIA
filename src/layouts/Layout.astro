@@ -1,0 +1,98 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  canonical?: string;
+}
+
+const {
+  title = 'GasoIA – Precios de carburantes en España',
+  description = 'Consulta los precios oficiales de gasolina y gasóleo en España. Datos del Ministerio actualizados diariamente. Buscador de gasolineras, histórico de precios y calculadora de viaje.',
+  image = '/og-image.png',
+  canonical = Astro.url.href,
+} = Astro.props;
+
+const siteUrl = import.meta.env.SITE_URL ?? 'https://gasoia.com';
+const fullTitle = title.includes('GasoIA') ? title : `${title} | GasoIA`;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "GasoIA",
+  "description": description,
+  "url": siteUrl,
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": `${siteUrl}/gasolineras?q={search_term_string}`,
+    "query-input": "required name=search_term_string"
+  }
+};
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{fullTitle}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
+
+  <!-- OpenGraph -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content={fullTitle} />
+  <meta property="og:description" content={description} />
+  <meta property="og:image"       content={`${siteUrl}${image}`} />
+  <meta property="og:url"         content={canonical} />
+  <meta property="og:site_name"   content="GasoIA" />
+  <meta property="og:locale"      content="es_ES" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content={fullTitle} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image"       content={`${siteUrl}${image}`} />
+
+  <!-- Favicon -->
+  <link rel="icon"             type="image/png" href="/gasoia-icon.png" />
+  <link rel="apple-touch-icon" href="/gasoia-icon.png" />
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- Theme script (avoid FOUC) -->
+  <script is:inline>
+    (function () {
+      const saved = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (saved === 'dark' || (!saved && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+
+  <!-- AdSense (loads via component when accepted) -->
+  {import.meta.env.ADSENSE_PUBLISHER_ID && (
+    <script
+      async
+      src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${import.meta.env.ADSENSE_PUBLISHER_ID}`}
+      crossorigin="anonymous"
+    />
+  )}
+</head>
+<body>
+  <slot name="navbar">
+    <!-- Default navbar injected by pages -->
+  </slot>
+  <main id="main-content">
+    <slot />
+  </main>
+  <slot name="footer" />
+</body>
+</html>

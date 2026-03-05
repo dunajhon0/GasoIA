@@ -1,0 +1,41 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Navbar from '../../components/Navbar.astro';
+import Footer from '../../components/Footer.astro';
+
+export const prerender = true;
+const today = new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+---
+<Layout title="Política de privacidad – GasoIA" description="Política de privacidad de GasoIA. Cómo tratamos tus datos personales.">
+  <Navbar slot="navbar" />
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 section prose dark:prose-invert animate-fade-in">
+    <h1>Política de Privacidad</h1>
+    <p class="text-muted text-sm">Última actualización: {today}</p>
+
+    <h2>1. Responsable del tratamiento</h2>
+    <p>GasoIA es un servicio de información sobre precios de carburantes en España. Para contactar con nosotros, utiliza el formulario de <a href="/contacto">contacto</a>.</p>
+
+    <h2>2. Datos que recopilamos</h2>
+    <ul>
+      <li><strong>Datos de uso:</strong> páginas visitadas y tiempo en el sitio (mediante Google Analytics, solo con tu consentimiento).</li>
+      <li><strong>Datos de geolocalización:</strong> solo si usas el buscador de gasolineras por ubicación. Nunca se almacenan en nuestros servidores.</li>
+      <li><strong>Preferencias locales:</strong> tema (claro/oscuro), favoritos y consentimiento de cookies, almacenados en tu navegador (localStorage).</li>
+    </ul>
+
+    <h2>3. Finalidad y base legal</h2>
+    <p>Tratamos tus datos para mejorar el servicio (interés legítimo) y, previo consentimiento, para mostrar publicidad personalizada (Google AdSense).</p>
+
+    <h2>4. Terceros</h2>
+    <ul>
+      <li><strong>Google AdSense / Analytics:</strong> solo activos con consentimiento explícito.</li>
+      <li><strong>Cloudflare:</strong> proveedor de infraestructura. Procesa IPs y cabeceras de red con fines de seguridad.</li>
+    </ul>
+
+    <h2>5. Tus derechos</h2>
+    <p>Tienes derecho a acceder, rectificar y suprimir tus datos. Como solo guardamos datos en tu dispositivo (localStorage), puedes eliminarlos borrando los datos del sitio desde la configuración de tu navegador.</p>
+
+    <h2>6. Cookies</h2>
+    <p>Consulta nuestra <a href="/legal/cookies">Política de cookies</a> para más información.</p>
+  </div>
+  <Footer slot="footer" />
+</Layout>

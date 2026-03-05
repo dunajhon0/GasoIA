@@ -1,0 +1,119 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import Footer from '../components/Footer.astro';
+import FuelsTable from '../components/FuelsTable';
+
+export const prerender = false;
+
+let fuels: {
+  key: string; label: string; today: number|null; yesterday: number|null;
+  minHist: number|null; minDate: string|null; maxHist: number|null; maxDate: string|null;
+}[] = [];
+let scope = 'peninsula';
+try {
+  const apiUrl = import.meta.env.SITE_URL ?? 'https://gasoia.com';
+  const res = await fetch(`${apiUrl}/api/fuels/table?scope=${scope}`);
+  if (res.ok) {
+    const json = await res.json();
+    fuels = json.fuels ?? [];
+  }
+} catch {}
+---
+
+<Layout
+  title="Precios de todos los combustibles en España – GasoIA"
+  description="Gasolina 95, Gasolina 98, Gasóleo A, Gasóleo B, Gasóleo C, Biodiésel, GLP y GNC. Precios hoy, ayer, y mínimos y máximos históricos."
+>
+  <Navbar slot="navbar" />
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 section animate-fade-in">
+    <h1 class="section-title">Todos los combustibles ⛽</h1>
+    <p class="section-subtitle">
+      Precio medio hoy, ayer, y mínimos/máximos históricos en Península y Baleares.
+    </p>
+
+    <!-- Scope selector -->
+    <div id="scope-tabs" class="flex gap-2 mb-6">
+      {[
+        { value: 'peninsula', label: 'Península + Baleares' },
+        { value: 'national',  label: 'Nacional' },
+        { value: 'baleares',  label: 'Solo Baleares' },
+        { value: 'canarias',  label: 'Canarias' },
+      ].map(s => (
+        <button
+          data-scope={s.value}
+          class:list={[
+            'px-3 py-1.5 rounded-lg text-sm font-medium transition-all border',
+            s.value === 'peninsula' ? 'btn-primary' : 'btn-secondary'
+          ]}
+          aria-pressed={s.value === 'peninsula'}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+
+    <div id="fuels-table-container">
+      <FuelsTable fuels={fuels} loading={false} client:load />
+    </div>
+
+    <p class="text-xs text-muted mt-4">
+      Los precios mínimos/máximos históricos se acumulan desde el primer día de datos en GasoIA.
+      Cuantos más días, más fiable el histórico.
+    </p>
+  </div>
+
+  <Footer slot="footer" />
+</Layout>
+
+<script>
+const tabs = document.querySelectorAll('[data-scope]');
+tabs.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const scope = (btn as HTMLButtonElement).dataset.scope!;
+    tabs.forEach(b => {
+      b.classList.remove('btn-primary');
+      b.classList.add('btn-secondary');
+      b.setAttribute('aria-pressed', 'false');
+    });
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-secondary');
+    btn.setAttribute('aria-pressed', 'true');
+
+    const container = document.getElementById('fuels-table-container');
+    if (container) {
+      container.innerHTML = '<div class="skeleton h-48 rounded-xl"></div>';
+      try {
+        const res = await fetch(`/api/fuels/table?scope=${scope}`);
+        const json = await res.json();
+        const fuels = json.fuels ?? [];
+        // Re-render simple HTML table
+        container.innerHTML = renderTable(fuels);
+      } catch {
+        container.innerHTML = '<p class="text-muted text-center py-8">Error al cargar datos</p>';
+      }
+    }
+  });
+});
+
+function renderTable(fuels: { label:string;today:number|null;yesterday:number|null;minHist:number|null;minDate:string|null;maxHist:number|null;maxDate:string|null }[]): string {
+  const fmt = (p: number|null) => p != null ? p.toFixed(3) + ' €' : '—';
+  const rows = fuels.map(f => {
+    const d = (f.today != null && f.yesterday != null) ? (f.today - f.yesterday) : null;
+    const cls = d == null ? '' : d > 0 ? 'price-up' : d < 0 ? 'price-down' : 'price-even';
+    return `<tr>
+      <td class="font-medium">${f.label}</td>
+      <td class="font-mono font-semibold">${fmt(f.today)}</td>
+      <td class="font-mono text-muted">${fmt(f.yesterday)}</td>
+      <td class="font-mono font-semibold ${cls}">${d != null ? (d > 0 ? '+' : '') + d.toFixed(4) : '—'}</td>
+      <td class="font-mono text-emerald-600 dark:text-emerald-400 text-xs">${fmt(f.minHist)}${f.minDate ? ' <span class="text-muted">('+f.minDate+')</span>' : ''}</td>
+      <td class="font-mono text-red-600 dark:text-red-400 text-xs">${fmt(f.maxHist)}${f.maxDate ? ' <span class="text-muted">('+f.maxDate+')</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="table-container"><table class="data-table">
+    <thead><tr><th>Combustible</th><th>Hoy (€/L)</th><th>Ayer (€/L)</th><th>Variación</th><th>Mín. Histórico</th><th>Máx. Histórico</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+</script>
