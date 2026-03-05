@@ -34,6 +34,15 @@ export interface BrandAggregate {
     station_count: number;
 }
 
+export interface DailyFuelStat {
+    day: string;
+    fuel: string;
+    avg_price: number | null;
+    min_price: number | null;
+    max_price: number | null;
+    sample_count: number;
+}
+
 // ─── Station Upsert ─────────────────────────────────────────────────────────
 
 export async function upsertStations(db: D1Database, stations: NormalizedStation[], updatedAt: string): Promise<void> {
@@ -109,6 +118,16 @@ export async function upsertBrandAggregate(db: D1Database, agg: BrandAggregate):
   `).bind(agg.date, agg.brand, agg.sp95_avg, agg.diesel_a_avg, agg.station_count).run();
 }
 
+export async function upsertDailyFuelStat(db: D1Database, stat: DailyFuelStat): Promise<void> {
+    await db.prepare(`
+    INSERT INTO daily_fuel_stats (day, fuel, avg_price, min_price, max_price, sample_count)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(day, fuel) DO UPDATE SET
+      avg_price=excluded.avg_price, min_price=excluded.min_price,
+      max_price=excluded.max_price, sample_count=excluded.sample_count
+  `).bind(stat.day, stat.fuel, stat.avg_price, stat.min_price, stat.max_price, stat.sample_count).run();
+}
+
 // ─── Query Helpers ───────────────────────────────────────────────────────────
 
 export async function getFuelAggregateForDate(
@@ -136,13 +155,36 @@ export async function getFuelAggregateForDate(
 }
 
 export async function getFuelHistory(
-    db: D1Database, fuel: Fuel, days: number
-): Promise<{ date: string; avg_price: number | null }[]> {
+    db: D1Database, fuel: Fuel | string, days: number
+): Promise<DailyFuelStat[]> {
     return (await db.prepare(
-        `SELECT date, avg_price FROM fuel_aggregates
-     WHERE fuel_type=? AND scope='national' AND avg_price IS NOT NULL
-     ORDER BY date DESC LIMIT ?`
-    ).bind(fuel, days).all<{ date: string; avg_price: number | null }>()).results ?? [];
+        `SELECT * FROM daily_fuel_stats
+     WHERE fuel=? AND avg_price IS NOT NULL
+     ORDER BY day DESC LIMIT ?`
+    ).bind(fuel, days).all<DailyFuelStat>()).results ?? [];
+}
+
+export async function getFuelStatsForKPIs(db: D1Database, fuel: Fuel | string) {
+    const today = (await db.prepare(
+        `SELECT avg_price FROM daily_fuel_stats WHERE fuel=? ORDER BY day DESC LIMIT 1`
+    ).bind(fuel).first<{ avg_price: number }>())?.avg_price ?? null;
+
+    const yesterday = (await db.prepare(
+        `SELECT avg_price FROM daily_fuel_stats WHERE fuel=? ORDER BY day DESC LIMIT 1 OFFSET 1`
+    ).bind(fuel).first<{ avg_price: number }>())?.avg_price ?? null;
+
+    const allTime = await db.prepare(
+        `SELECT MIN(min_price) as minp, MAX(max_price) as maxp FROM daily_fuel_stats WHERE fuel=?`
+    ).bind(fuel).first<{ minp: number, maxp: number }>();
+
+    return {
+        todayAvg: today,
+        yesterdayAvg: yesterday,
+        allTimeMin: allTime?.minp ?? null,
+        allTimeMax: allTime?.maxp ?? null,
+        deltaTodayVsYesterday: (today && yesterday) ? today - yesterday : null,
+        deltaPct: (today && yesterday) ? ((today - yesterday) / yesterday) * 100 : null
+    };
 }
 
 export async function getCityAggregatesByNames(

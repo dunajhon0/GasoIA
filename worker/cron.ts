@@ -16,6 +16,7 @@ import {
     upsertFuelAggregate,
     upsertCityAggregate,
     upsertBrandAggregate,
+    upsertDailyFuelStat,
     type Fuel,
     type Scope,
     type CityAggregate,
@@ -88,15 +89,32 @@ export async function runCron(db: D1Database): Promise<void> {
     for (const { scope, data } of scopes) {
         for (const { db: fuelDb, field } of FUEL_KEYS) {
             const vals = data.map(s => s.prices[field as keyof typeof s.prices] as number | null);
+            const avg = calcAvg(vals);
+            const min = calcMin(vals);
+            const max = calcMax(vals);
+            const count = vals.filter(v => v !== null && v > 0).length;
+
             await upsertFuelAggregate(db, {
                 date: today,
                 fuel_type: fuelDb,
                 scope,
-                avg_price: calcAvg(vals),
-                min_price: calcMin(vals),
-                max_price: calcMax(vals),
-                count: vals.filter(v => v !== null && v > 0).length,
+                avg_price: avg,
+                min_price: min,
+                max_price: max,
+                count: count,
             });
+
+            // Also update the new daily_fuel_stats table for national scope
+            if (scope === 'national') {
+                await upsertDailyFuelStat(db, {
+                    day: today,
+                    fuel: fuelDb,
+                    avg_price: avg,
+                    min_price: min,
+                    max_price: max,
+                    sample_count: count,
+                });
+            }
         }
     }
 
