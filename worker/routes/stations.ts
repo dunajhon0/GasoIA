@@ -15,11 +15,11 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
     const radiusQ = c.req.query('radius');
     const fuel = c.req.query('fuel') ?? '';
     const brand = c.req.query('brand') ?? '';
-    const sort = c.req.query('sort') ?? 'price'; // price | distance | brand
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), MAX_RESULTS);
+    const sort = c.req.query('sort') ?? 'price';
+    const order = c.req.query('order') ?? 'asc';
+    const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10));
+    const pageSize = Math.min(Math.max(1, parseInt(c.req.query('pageSize') ?? '25', 10)), 100);
 
-    // Cache key agnostic of request — fetch fresh data (worker always has latest)
-    // In production, you'd cache this in KV or use the D1 stations + prices tables
     let stations: NormalizedStation[] = [];
     try {
         stations = await fetchMineturData();
@@ -55,14 +55,14 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
     }
 
     if (brand) {
-        const bLow = brand.toLowerCase();
-        filtered = filtered.filter(s => s.brand.toLowerCase().includes(bLow));
+        const bBrands = brand.split(',').map(b => b.trim().toLowerCase());
+        filtered = filtered.filter(s => bBrands.some(b => s.brand.toLowerCase().includes(b)));
     }
 
     if (fuel) {
         filtered = filtered.filter(s => {
-            const p = s.prices[fuel as keyof typeof s.prices];
-            return p !== null && (p as number) > 0;
+            const val = s.prices[fuel as keyof typeof s.prices];
+            return val !== null && (val as number) > 0;
         });
     }
 
@@ -80,26 +80,43 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
             .map(s => ({
                 ...s,
                 distKm: haversineKm(lat, lon, s.lat!, s.lon!),
-            }))
-            .filter(s => s.distKm! <= radius) as WithDist[];
+            }));
+
+        if (radiusQ) {
+            withDist = withDist.filter(s => s.distKm! <= radius);
+        }
     }
 
     // ─── Sort ──────────────────────────────────────────────────────────────────
-    if (sort === 'distance' && lat !== null) {
-        withDist.sort((a, b) => (a.distKm ?? 999) - (b.distKm ?? 999));
-    } else if (sort === 'brand') {
-        withDist.sort((a, b) => a.brand.localeCompare(b.brand));
-    } else {
-        // price: sort by SP95 or selected fuel
-        const fuelKey = (fuel || 'sp95') as keyof NormalizedStation['prices'];
-        withDist.sort((a, b) => {
-            const pa = a.prices[fuelKey] ?? 999;
-            const pb = b.prices[fuelKey] ?? 999;
-            return (pa as number) - (pb as number);
-        });
-    }
+    const isAsc = order === 'asc';
+    const mult = isAsc ? 1 : -1;
 
-    const results = withDist.slice(0, limit).map(s => ({
+    withDist.sort((a, b) => {
+        if (sort === 'distance' && a.distKm !== undefined && b.distKm !== undefined) {
+            return (a.distKm - b.distKm) * mult;
+        }
+
+        if (sort === 'brand') {
+            return a.brand.localeCompare(b.brand) * mult;
+        }
+
+        if (sort === 'price') {
+            const fuelKey = (fuel || 'sp95') as keyof NormalizedStation['prices'];
+            const pa = a.prices[fuelKey] ?? (isAsc ? 999 : -1);
+            const pb = b.prices[fuelKey] ?? (isAsc ? 999 : -1);
+            return ((pa as number) - (pb as number)) * mult;
+        }
+
+        // Default or other sort types can be added here
+        return 0;
+    });
+
+    // ─── Pagination ────────────────────────────────────────────────────────────
+    const total = withDist.length;
+    const start = (page - 1) * pageSize;
+    const paginated = withDist.slice(start, start + pageSize);
+
+    const items = paginated.map(s => ({
         id: s.id,
         name: s.name,
         address: s.address,
@@ -111,11 +128,16 @@ export async function stationsRoute(c: Context<{ Bindings: Env }>) {
         lon: s.lon,
         schedule: s.schedule,
         brand: s.brand,
-        distKm: (s as WithDist).distKm ?? null,
+        distKm: s.distKm ?? null,
         prices: s.prices,
     }));
 
-    return c.json({ total: withDist.length, showing: results.length, stations: results }, 200, {
+    return c.json({
+        total,
+        page,
+        pageSize,
+        items
+    }, 200, {
         'Cache-Control': 'public, max-age=300',
     });
 }
