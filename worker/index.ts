@@ -19,7 +19,7 @@ export interface Env {
     SITE_URL: string;
 }
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env }>().basePath('/api');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use('/*', cors({
@@ -51,15 +51,7 @@ app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 export default {
-    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-        const url = new URL(request.url);
-        if (url.pathname === "/api") url.pathname = "/";
-        if (url.pathname.startsWith("/api/")) {
-            url.pathname = url.pathname.slice("/api".length);
-            request = new Request(url.toString(), request);
-        }
-        return app.fetch(request, env, ctx);
-    },
+    fetch: app.fetch,
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
         ctx.waitUntil(runCron(env.DB));
     },
