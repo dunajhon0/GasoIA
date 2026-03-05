@@ -140,14 +140,14 @@ export default function BrandChart({ nationalAvg }: { nationalAvg: NationalAvg |
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {brands.slice(0, 9).map(b => {
                     const price = b[fuel];
-                    const delta = (price !== null && avg !== null) ? price - avg : null;
+                    const delta = (price !== null && avg !== undefined && avg !== null) ? price - avg : null;
                     return (
                         <div key={b.brand} className="card p-4 flex items-center gap-3">
                             <div className="w-3 h-12 rounded-full shrink-0" style={{ background: b.color }} />
                             <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-sm truncate">{b.display}</p>
                                 <p className="font-mono font-bold text-lg">{fmt(price)}</p>
-                                <p className={`text-xs ${deltaBg(price, avg)}`}>
+                                <p className={`text-xs ${deltaBg(price, avg ?? null)}`}>
                                     {delta !== null ? `${delta > 0 ? '+' : ''}${delta.toFixed(4)} vs media` : ''}
                                 </p>
                             </div>

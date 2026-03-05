@@ -38,13 +38,13 @@ app.use('/*', async (c, next) => {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.get('/summary', summaryRoute);
 app.get('/history', historyRoute);
-app.get('/cities/top10', citiesRoute);
-app.get('/fuels/table', fuelsRoute);
-app.get('/stations/search', stationsRoute);
+app.get('/cities', citiesRoute);
+app.get('/fuels', fuelsRoute);
+app.get('/stations', stationsRoute);
 app.get('/brands', brandsRoute);
 
 // Health check
-app.get('/health', (c) => c.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/', (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
 // 404 fallback for API
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));

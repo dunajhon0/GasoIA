@@ -86,8 +86,8 @@ export async function fetchMineturData(): Promise<NormalizedStation[]> {
 
     const resp = await fetch(url, {
         headers: { Accept: 'application/json' },
-        cf: { cacheTtl: 3600, cacheEverything: false } as RequestInitCfProperties,
-    });
+        cf: { cacheTtl: 3600, cacheEverything: false }
+    } as any);
 
     if (!resp.ok) {
         throw new Error(`MINETUR API error: ${resp.status} ${resp.statusText}`);

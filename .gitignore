@@ -3,3 +3,8 @@ dist/
 .DS_Store
 .env
 .env.*
+debug_migration.txt
+
+# Debug files
+debug_migration.txt
+ts_errors.txt
