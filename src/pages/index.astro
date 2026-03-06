@@ -149,8 +149,8 @@ export const prerender = false;
 async function loadDashboard() {
   try {
     const [summaryRes, citiesRes] = await Promise.all([
-      fetch('/api/summary'),
-      fetch('/api/cities/top10'),
+      fetch(`/api/summary?t=${Date.now()}`),
+      fetch(`/api/cities/top10?t=${Date.now()}`),
     ]);
     const summary = summaryRes.ok ? await summaryRes.json() : null;
     const cities  = citiesRes.ok  ? await citiesRes.json() : null;
