@@ -169,51 +169,60 @@ async function loadDashboard() {
       };
       
       const spark = (pts: number[], baseColor: string, id: string) => {
-        if (!pts || pts.length < 2) return '';
-        const min = Math.min(...pts), max = Math.max(...pts);
-        const range = (max - min) || 0.0001; 
-        const w = 120, h = 50;
-        const padding = 6; // Vertical padding for safe strokes
+        if (!pts || pts.length === 0) return '';
+        
+        const w = 120, h = 50, padding = 6;
         const availableH = h - (padding * 2);
+        const min = Math.min(...pts), max = Math.max(...pts);
+        const range = (max - min) || 0.0001;
+        
+        // Handle 1 point case or all points equal
+        const isSinglePoint = pts.length === 1;
+        const allPointsEqual = max === min;
         
         // Trend-based coloring
         const first = pts[0], last = pts[pts.length - 1];
-        const isUp = last > first;
-        const isDown = last < first;
+        const isUp = !isSinglePoint && last > first;
+        const isDown = !isSinglePoint && last < first;
         const color = isUp ? '#ef4444' : (isDown ? '#22c55e' : baseColor);
         
         // Generate smooth curve points
         const points = pts.map((p, i) => {
-          const x = (i / (pts.length - 1)) * w;
-          const y = (max === min) 
+          const x = isSinglePoint ? w / 2 : (i / (pts.length - 1)) * w;
+          const y = (isSinglePoint || allPointsEqual) 
             ? h / 2 
             : h - padding - ((p - min) / range) * availableH;
           return { x, y };
         });
 
-        // Path (Bezier)
-        let d = `M ${points[0].x},${points[0].y}`;
-        for (let i = 0; i < points.length - 1; i++) {
-          const cx = (points[i].x + points[i+1].x) / 2;
-          const cy = (points[i].y + points[i+1].y) / 2;
-          d += ` Q ${points[i].x},${points[i].y} ${cx},${cy}`;
+        // Path (Bezier or Line)
+        let d = '';
+        if (isSinglePoint) {
+            d = `M 0,${h/2} L ${w},${h/2}`; // Horizontal line for single point
+        } else {
+            d = `M ${points[0].x},${points[0].y}`;
+            for (let i = 0; i < points.length - 1; i++) {
+              const cx = (points[i].x + points[i+1].x) / 2;
+              const cy = (points[i].y + points[i+1].y) / 2;
+              d += ` Q ${points[i].x},${points[i].y} ${cx},${cy}`;
+            }
+            d += ` L ${points[points.length-1].x},${points[points.length-1].y}`;
         }
-        d += ` L ${points[points.length-1].x},${points[points.length-1].y}`;
 
         // Fill down to bottom
-        const fillD = `${d} V ${h} H 0 Z`;
+        const fillD = isSinglePoint ? '' : `${d} V ${h} H 0 Z`;
 
         return `
-          <div class="relative w-[100px] sm:w-[130px] h-[50px] shrink-0" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.03))">
+          <div class="relative w-[80px] sm:w-[130px] h-[40px] sm:h-[50px] shrink-0" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.02))">
             <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block overflow-visible" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="grad-${id}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.2" />
+                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.15" />
                   <stop offset="100%" style="stop-color:${color};stop-opacity:0" />
                 </linearGradient>
               </defs>
-              <path d="${fillD}" fill="url(#grad-${id})" />
-              <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              ${fillD ? `<path d="${fillD}" fill="url(#grad-${id})" />` : ''}
+              <path d="${d}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </div>
         `;

@@ -12,11 +12,13 @@ import { citiesRoute, top10CitiesRoute } from './routes/cities';
 import { fuelsRoute } from './routes/fuels';
 import { stationsRoute } from './routes/stations';
 import { brandsRoute } from './routes/brands';
+import { rebuildHistoryRoute } from './routes/admin';
 
 export interface Env {
     DB: D1Database;
     ADSENSE_PUBLISHER_ID: string;
     SITE_URL: string;
+    ADMIN_TOKEN: string;
 }
 
 const app = new Hono<{ Bindings: Env }>().basePath('/api');
@@ -44,6 +46,7 @@ app.get('/fuels', fuelsRoute);
 app.get('/stations', stationsRoute);
 app.get('/stations/by-ids', stationsRoute);
 app.get('/brands', brandsRoute);
+app.get('/admin/rebuild-history', rebuildHistoryRoute);
 
 // Health check
 app.get('/', (c) => c.json({ ok: true, ts: new Date().toISOString() }));

@@ -83,23 +83,36 @@ function parseCoord(val: string | undefined): number | null {
 
 export async function fetchMineturData(): Promise<NormalizedStation[]> {
     const url = 'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/';
+    return await _fetchAndNormalize(url);
+}
 
+export async function fetchMineturHistoricalData(dateIso: string): Promise<NormalizedStation[]> {
+    // dateIso is YYYY-MM-DD, API expects DD-MM-YYYY
+    const [y, m, d] = dateIso.split('-');
+    const dateFormatted = `${d}-${m}-${y}`;
+    const url = `https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/Historial/${dateFormatted}`;
+    return await _fetchAndNormalize(url);
+}
+
+async function _fetchAndNormalize(url: string): Promise<NormalizedStation[]> {
     const resp = await fetch(url, {
         headers: { Accept: 'application/json' },
         cf: { cacheTtl: 3600, cacheEverything: false }
     } as any);
 
     if (!resp.ok) {
-        throw new Error(`MINETUR API error: ${resp.status} ${resp.statusText}`);
+        throw new Error(`MINETUR API error: ${resp.status} ${resp.statusText} at ${url}`);
     }
 
     const data: RawMineturResponse = await resp.json();
 
     if (data.ResultadoConsulta !== 'OK') {
-        throw new Error(`MINETUR returned non-OK result: ${data.ResultadoConsulta}`);
+        // If it's Sunday or a day without records yet, it might return non-OK
+        console.warn(`MINETUR result non-OK for ${url}: ${data.ResultadoConsulta}`);
+        return [];
     }
 
-    return data.ListaEESSPrecio.map(normalizeStation);
+    return (data.ListaEESSPrecio ?? []).map(normalizeStation);
 }
 
 export function normalizeStation(raw: RawStation): NormalizedStation {
