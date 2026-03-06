@@ -37,10 +37,11 @@ export async function summaryRoute(c: Context<{ Bindings: Env }>) {
 
     return c.json({
         date,
+        v: '3.1.0', // Debug marker to verify deployment
         updatedAt: new Date().toISOString(),
         sp95: formatFuel('sp95', sp95History),
         dieselA: formatFuel('diesel_a', dieselAHistory),
     }, 200, {
-        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
     });
 }
