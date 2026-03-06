@@ -130,7 +130,15 @@ export default function StationFinder() {
 
     const [favorites, setFavorites] = useState<Set<string>>(() => {
         if (typeof window === 'undefined') return new Set();
-        try { return new Set(JSON.parse(localStorage.getItem('fav-stations') ?? '[]')); } catch { return new Set(); }
+        try {
+            // Unify keys: ensure we only use 'fav-stations'
+            const legacy = localStorage.getItem('favorites');
+            if (legacy && !localStorage.getItem('fav-stations')) {
+                localStorage.setItem('fav-stations', legacy);
+                localStorage.removeItem('favorites');
+            }
+            return new Set(JSON.parse(localStorage.getItem('fav-stations') ?? '[]'));
+        } catch { return new Set(); }
     });
 
     const [navTarget, setNavTarget] = useState<Station | null>(null);
@@ -144,7 +152,6 @@ export default function StationFinder() {
         if (typeof window === 'undefined') return [];
         try { return JSON.parse(localStorage.getItem('gasoia:favPriceChanges') ?? '[]'); } catch { return []; }
     });
-    const [showChangesModal, setShowChangesModal] = useState(false);
     const [onlyFavorites, setOnlyFavorites] = useState(false);
     const [lastViewedAt, setLastViewedAt] = useState<string>(() => {
         if (typeof window === 'undefined') return new Date().toISOString();
@@ -171,7 +178,13 @@ export default function StationFinder() {
                 pageSize: '24'
             };
 
-            if (onlyFavorites && favorites.size > 0) {
+            if (onlyFavorites) {
+                if (favorites.size === 0) {
+                    setStations([]);
+                    setTotal(0);
+                    setLoading(false);
+                    return;
+                }
                 params.ids = Array.from(favorites).join(',');
             }
 
@@ -437,7 +450,7 @@ export default function StationFinder() {
             setPage(1);
             fetchStations(false);
         }
-    }, [city, userPos, radius, fuel, brand, sort, order, onlyFavorites]);
+    }, [city, userPos, radius, fuel, brand, sort, order, onlyFavorites, favorites.size]);
 
     const toggleFav = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -632,21 +645,6 @@ export default function StationFinder() {
                         >
                             ⭐ {onlyFavorites ? 'Ver todas' : 'Solo favoritas'}
                         </button>
-
-                        <button
-                            onClick={() => { setShowChangesModal(true); markAllViewed(); }}
-                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2 relative ${unseenCount > 0
-                                ? 'bg-indigo-500 text-white border-indigo-500 shadow-indigo-500/20 shadow-lg animate-pulse'
-                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-500'
-                                }`}
-                        >
-                            🔔 Cambios
-                            {unseenCount > 0 && (
-                                <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-slate-900">
-                                    {unseenCount}
-                                </span>
-                            )}
-                        </button>
                     </div>
 
                     {total > 0 && (
@@ -780,6 +778,44 @@ export default function StationFinder() {
                                                 <span className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-600 rounded-lg">📍 {s.distKm.toFixed(1)} km</span>
                                             )}
                                         </div>
+
+                                        {/* Variation Block */}
+                                        <div className="mt-5">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">Variación hoy</span>
+                                                <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {Object.entries(s.prices).map(([fKey, currentPrice]) => {
+                                                    if (!currentPrice) return null;
+                                                    const change = priceChanges.find(c => c.stationId === s.id && c.fuelCode === fKey);
+                                                    if (!change) return null;
+
+                                                    const isDown = change.direction === 'down';
+                                                    const colorClass = isDown ? 'text-green-600 bg-green-50/50 dark:bg-green-500/10' : 'text-red-600 bg-red-50/50 dark:bg-red-500/10';
+
+                                                    return (
+                                                        <div key={fKey} className={`flex flex-col px-2 py-1 rounded-lg border border-current/10 transition-all hover:scale-105 ${colorClass}`}>
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <span className="text-[8px] font-black uppercase tracking-tight opacity-70">
+                                                                    {fKey === 'dieselA' ? 'DSL A' : fKey}
+                                                                </span>
+                                                                <span className="text-[9px] font-black font-mono">{isDown ? '↓' : '↑'} {Math.abs(change.delta).toFixed(3)}€</span>
+                                                            </div>
+                                                            <div className="text-[8px] font-bold opacity-60 text-right leading-none mt-0.5">
+                                                                {isDown ? '-' : '+'}{Math.abs((change.delta / change.oldPrice) * 100).toFixed(1)}%
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {Object.entries(s.prices).every(([fk]) => !priceChanges.some(c => c.stationId === s.id && c.fuelCode === fk)) && (
+                                                    <div className="w-full text-center py-1">
+                                                        <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest italic">Estable · Sin cambios</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="flex flex-col gap-4 justify-center items-end min-w-[200px]">
@@ -864,13 +900,29 @@ export default function StationFinder() {
                         )}
                     </div>
                 ) : !loading && (
-                    <div className="card-flat p-12 text-center text-muted animate-fade-in">
-                        <div className="text-6xl mb-4">🔍</div>
-                        <h3 className="text-xl font-bold mb-2 text-slate-700 dark:text-slate-300">No hay resultados</h3>
-                        <p>Intenta ajustar los filtros de búsqueda o cambia la ubicación.</p>
-                        <button onClick={handleReset} className="mt-6 text-brand-500 font-bold hover:underline">
-                            Limpiar todos los filtros
-                        </button>
+                    <div className="card-flat p-12 text-center text-muted animate-fade-in flex flex-col items-center">
+                        {onlyFavorites ? (
+                            <>
+                                <div className="text-7xl mb-6">⭐</div>
+                                <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white uppercase tracking-tight">Todavía no tienes gasolineras favoritas</h3>
+                                <p className="text-slate-500 max-w-sm mx-auto mb-8 font-medium">Pulsa la estrella de una gasolinera para guardarla aquí.</p>
+                                <button
+                                    onClick={() => setOnlyFavorites(false)}
+                                    className="btn-brand px-8 py-3 rounded-2xl shadow-xl hover:scale-105 transition-all text-sm font-black uppercase tracking-widest"
+                                >
+                                    Ver todas las gasolineras
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <div className="text-6xl mb-4">🔍</div>
+                                <h3 className="text-xl font-bold mb-2 text-slate-700 dark:text-slate-300">No hay resultados</h3>
+                                <p>Intenta ajustar los filtros de búsqueda o cambia la ubicación.</p>
+                                <button onClick={handleReset} className="mt-6 text-brand-500 font-bold hover:underline">
+                                    Limpiar todos los filtros
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
@@ -946,93 +998,6 @@ export default function StationFinder() {
                 </button>
             )}
 
-            {/* Changes Modal */}
-            {showChangesModal && (
-                <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4 animate-fade-in">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowChangesModal(false)}></div>
-                    <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in flex flex-col max-h-[90vh]">
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">🔔</span>
-                                    <div>
-                                        <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Cambios de precios</h3>
-                                        <p className="text-xs text-muted font-bold uppercase tracking-widest mt-0.5">Alertas en tus gasolineras favoritas</p>
-                                    </div>
-                                </div>
-                                <button onClick={() => setShowChangesModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">✕</button>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            {priceChanges.length === 0 ? (
-                                <div className="py-12 text-center">
-                                    <p className="text-4xl mb-3">📭</p>
-                                    <p className="text-slate-500 font-bold">No hay cambios registrados en tus favoritas.</p>
-                                    <p className="text-xs text-muted mt-1 uppercase tracking-widest">Las alertas aparecerán cuando detectemos variaciones.</p>
-                                </div>
-                            ) : (
-                                priceChanges.map(change => (
-                                    <div key={change.id} className={`p-4 rounded-2xl border-2 transition-all flex flex-col sm:flex-row items-center gap-4 ${change.direction === 'down' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 ${change.direction === 'down' ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-red-500 text-white shadow-lg shadow-red-500/30'}`}>
-                                            {change.direction === 'down' ? '📉' : '📈'}
-                                        </div>
-                                        <div className="flex-1 min-w-0 text-center sm:text-left">
-                                            <p className="font-black text-slate-800 uppercase truncate leading-tight">{change.meta.name}</p>
-                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{change.meta.address} · {change.meta.brand}</p>
-                                            <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
-                                                <span className="px-2 py-0.5 bg-white dark:bg-slate-800 rounded-md text-[10px] font-black uppercase tracking-tighter border border-slate-100 dark:border-slate-700">{change.fuelCode}</span>
-                                                <span className="text-xs font-black text-slate-500 mt-0.5">{new Date(change.detectedAt).toLocaleString()}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col items-center sm:items-end shrink-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-bold text-slate-400 line-through">{change.oldPrice.toFixed(3)}€</span>
-                                                <span className={`text-xl font-black font-mono ${change.direction === 'down' ? 'text-green-600' : 'text-red-600'}`}>{change.newPrice.toFixed(3)}€</span>
-                                            </div>
-                                            <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mt-1 ${change.direction === 'down' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                                                {change.direction === 'down' ? '-' : '+'}{Math.abs(change.delta).toFixed(3)}€/L
-                                            </p>
-                                        </div>
-                                        <div className="flex flex-row sm:flex-col gap-2 shrink-0">
-                                            <button
-                                                onClick={() => { setShowChangesModal(false); scrollToString(change.stationId); }}
-                                                className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-white text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 hover:border-brand-500 transition-all whitespace-nowrap"
-                                            >
-                                                Ver
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    const s = { ...change.meta, id: change.stationId } as any;
-                                                    openNavigation(s);
-                                                }}
-                                                className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all whitespace-nowrap"
-                                            >
-                                                Ir
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-
-                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between gap-4">
-                            <button
-                                onClick={clearHistory}
-                                className="px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all uppercase tracking-widest"
-                            >
-                                Borrar historial
-                            </button>
-                            <button
-                                onClick={() => setShowChangesModal(false)}
-                                className="px-8 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div >
     );
 }
