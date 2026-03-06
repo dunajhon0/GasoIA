@@ -157,25 +157,42 @@ export async function getFuelAggregateForDate(
 export async function getFuelHistory(
     db: D1Database, fuel: Fuel | string, days: number
 ): Promise<DailyFuelStat[]> {
-    return (await db.prepare(
-        `SELECT * FROM daily_fuel_stats
-     WHERE fuel=? AND avg_price IS NOT NULL
-     ORDER BY day DESC LIMIT ?`
-    ).bind(fuel, days).all<DailyFuelStat>()).results ?? [];
+    // Union both tables to ensure fallback if one is sparse
+    const query = `
+        SELECT day, fuel, avg_price, min_price, max_price, sample_count 
+        FROM daily_fuel_stats 
+        WHERE fuel = ? AND avg_price IS NOT NULL
+        UNION
+        SELECT date as day, fuel_type as fuel, avg_price, min_price, max_price, count as sample_count
+        FROM fuel_aggregates
+        WHERE fuel_type = ? AND scope = 'national' AND avg_price IS NOT NULL
+        ORDER BY day DESC LIMIT ?
+    `;
+    return (await db.prepare(query).bind(fuel, fuel, days).all<DailyFuelStat>()).results ?? [];
 }
 
 export async function getFuelStatsForKPIs(db: D1Database, fuel: Fuel | string) {
-    const today = (await db.prepare(
-        `SELECT avg_price FROM daily_fuel_stats WHERE fuel=? ORDER BY day DESC LIMIT 1`
-    ).bind(fuel).first<{ avg_price: number }>())?.avg_price ?? null;
+    const unifiedQuery = `
+        SELECT avg_price, min_price, max_price, day FROM (
+            SELECT avg_price, min_price, max_price, day FROM daily_fuel_stats WHERE fuel = ? AND avg_price IS NOT NULL
+            UNION
+            SELECT avg_price, min_price, max_price, date as day FROM fuel_aggregates WHERE fuel_type = ? AND scope = 'national' AND avg_price IS NOT NULL
+        ) ORDER BY day DESC
+    `;
 
-    const yesterday = (await db.prepare(
-        `SELECT avg_price FROM daily_fuel_stats WHERE fuel=? ORDER BY day DESC LIMIT 1 OFFSET 1`
-    ).bind(fuel).first<{ avg_price: number }>())?.avg_price ?? null;
+    const results = (await db.prepare(unifiedQuery).bind(fuel, fuel).all<{ avg_price: number, min_price: number, max_price: number }>()).results ?? [];
 
-    const allTime = await db.prepare(
-        `SELECT MIN(min_price) as minp, MAX(max_price) as maxp FROM daily_fuel_stats WHERE fuel=?`
-    ).bind(fuel).first<{ minp: number, maxp: number }>();
+    const today = results[0]?.avg_price ?? null;
+    const yesterday = results[1]?.avg_price ?? null;
+
+    // For all-time, we union the min/max of both tables and then aggregate
+    const allTime = await db.prepare(`
+        SELECT MIN(m) as minp, MAX(x) as maxp FROM (
+            SELECT MIN(min_price) as m, MAX(max_price) as x FROM daily_fuel_stats WHERE fuel=?
+            UNION ALL
+            SELECT MIN(min_price) as m, MAX(max_price) as x FROM fuel_aggregates WHERE fuel_type=? AND scope='national'
+        )
+    `).bind(fuel, fuel).first<{ minp: number, maxp: number }>();
 
     return {
         todayAvg: today,

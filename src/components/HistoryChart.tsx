@@ -286,7 +286,11 @@ export default function HistoryChart() {
         );
     };
 
-    const isInsufficient = !loading && (!data || activeFuels.every(f => !data.series[f] || data.series[f].length === 0));
+    const isInsufficient = useMemo(() => {
+        if (loading || !data) return false;
+        // True only if EVERY active fuel has zero data points
+        return activeFuels.every(f => !data.series[f] || data.series[f].length === 0);
+    }, [data, activeFuels, loading]);
 
     return (
         <div className="space-y-6">
@@ -344,22 +348,34 @@ export default function HistoryChart() {
                     <button onClick={load} className="btn-brand">Reintentar</button>
                 </div>
             ) : (
-                <div className="animate-fade-in min-h-[500px]">
+                <div className="animate-fade-in min-h-[500px] relative">
                     {renderKPIs()}
+
                     <div className="card p-4 sm:p-8 shadow-2xl relative bg-white/50 dark:bg-slate-900/40 backdrop-blur-sm border-2 border-slate-50 dark:border-slate-800/50">
-                        {renderChart()}
-                        {isInsufficient && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-900/90 backdrop-blur-md p-8 text-center rounded-3xl z-20">
-                                <div className="max-w-xs">
-                                    <p className="text-6xl mb-4">📈</p>
-                                    <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight mb-2">Sin datos suficientes</h3>
-                                    <p className="text-xs text-muted font-medium">
-                                        No hay datos históricos para este combustible en el rango seleccionado ({range}D).
+                        {isInsufficient ? (
+                            <div className="h-[300px] sm:h-[420px] flex flex-col items-center justify-center text-center p-8 space-y-4">
+                                <div className="text-6xl animate-pulse">📈</div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg">Histórico insuficiente</h3>
+                                    <p className="text-xs text-muted font-medium max-w-[240px] mx-auto mt-2">
+                                        No hemos encontrado registros suficientes de precios oficiales para <strong>{FUEL_MAP[fuel]?.label || 'este combustible'}</strong> en los últimos {range} días.
                                     </p>
                                 </div>
                             </div>
+                        ) : (
+                            renderChart()
                         )}
                     </div>
+
+                    {fuel === 'ALL' && !isInsufficient && (
+                        <div className="mt-4 p-4 rounded-2xl bg-brand-50/50 dark:bg-brand-500/5 border border-brand-100 dark:border-brand-500/20">
+                            <p className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
+                                Vista Multi-Combustible
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-1">Comparativa directa de las tendencias nacionales para los principales tipos de combustible.</p>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
