@@ -13,12 +13,15 @@ import { fuelsRoute } from './routes/fuels';
 import { stationsRoute } from './routes/stations';
 import { brandsRoute } from './routes/brands';
 import { rebuildHistoryRoute } from './routes/admin';
+import { versionRoute } from './routes/version';
 
 export interface Env {
     DB: D1Database;
     ADSENSE_PUBLISHER_ID: string;
     SITE_URL: string;
     ADMIN_TOKEN: string;
+    GIT_SHA?: string;
+    BUILD_TIME?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>().basePath('/api');
@@ -38,6 +41,7 @@ app.use('/*', async (c, next) => {
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+app.get('/version', versionRoute);
 app.get('/summary', summaryRoute);
 app.get('/history', historyRoute);
 app.get('/cities/top10', top10CitiesRoute);

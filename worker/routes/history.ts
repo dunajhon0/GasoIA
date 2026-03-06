@@ -65,7 +65,6 @@ export async function historyRoute(c: Context<{ Bindings: Env }>) {
         stats,
         generatedAt: new Date().toISOString()
     }, 200, {
-        // Reduced cache time so polling clients can pick up new backfill data faster
-        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
+        'Cache-Control': 'no-store, max-age=0, must-revalidate',
     });
 }

@@ -42,6 +42,6 @@ export async function summaryRoute(c: Context<{ Bindings: Env }>) {
         sp95: formatFuel('sp95', sp95History),
         dieselA: formatFuel('diesel_a', dieselAHistory),
     }, 200, {
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+        'Cache-Control': 'no-store, max-age=0, must-revalidate',
     });
 }
