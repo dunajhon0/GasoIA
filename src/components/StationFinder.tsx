@@ -131,11 +131,17 @@ export default function StationFinder() {
     const [favorites, setFavorites] = useState<Set<string>>(() => {
         if (typeof window === 'undefined') return new Set();
         try {
-            // Unify keys: ensure we only use 'fav-stations'
             const legacy = localStorage.getItem('favorites');
             if (legacy && !localStorage.getItem('fav-stations')) {
                 localStorage.setItem('fav-stations', legacy);
+                // NOT removing favorites immediately to be absolutely safe during rollout? 
+                // No, user says unified properly.
                 localStorage.removeItem('favorites');
+            }
+            const legacy2 = localStorage.getItem('gasoia:favorites');
+            if (legacy2 && !localStorage.getItem('fav-stations')) {
+                localStorage.setItem('fav-stations', legacy2);
+                localStorage.removeItem('gasoia:favorites');
             }
             return new Set(JSON.parse(localStorage.getItem('fav-stations') ?? '[]'));
         } catch { return new Set(); }
@@ -152,7 +158,13 @@ export default function StationFinder() {
         if (typeof window === 'undefined') return [];
         try { return JSON.parse(localStorage.getItem('gasoia:favPriceChanges') ?? '[]'); } catch { return []; }
     });
-    const [onlyFavorites, setOnlyFavorites] = useState(false);
+
+    // Persistent toggle for "Only Favorites"
+    const [onlyFavorites, setOnlyFavorites] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return false;
+        return localStorage.getItem('gasoia:showOnlyFavorites') === 'true';
+    });
+
     const [lastViewedAt, setLastViewedAt] = useState<string>(() => {
         if (typeof window === 'undefined') return new Date().toISOString();
         return localStorage.getItem('gasoia:favChangesLastViewedAt') ?? new Date().toISOString();
@@ -241,6 +253,7 @@ export default function StationFinder() {
         setRadius(10);
         setUserPos(null);
         setGeoStatus('idle');
+        setOnlyFavorites(false);
         setPage(1);
         if (typeof window !== 'undefined') {
             window.history.replaceState({}, '', window.location.pathname);
@@ -424,9 +437,15 @@ export default function StationFinder() {
         setTimeout(() => setHighlightedId(null), 3000);
     };
 
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('gasoia:showOnlyFavorites', String(onlyFavorites));
+        }
+    }, [onlyFavorites]);
+
     // SEO & Page Title Update
     useEffect(() => {
-        if (!typeof window) return;
+        if (typeof window === 'undefined') return;
         const baseTitle = "Buscador de gasolineras baratas cerca de mí – GasoIA";
         const baseDesc = "Encuentra las gasolineras más baratas cerca de tu ubicación o en cualquier ciudad de España. Precios actualizados hoy. Filtra por combustible y marca.";
 
@@ -450,7 +469,7 @@ export default function StationFinder() {
             setPage(1);
             fetchStations(false);
         }
-    }, [city, userPos, radius, fuel, brand, sort, order, onlyFavorites, favorites.size]);
+    }, [city, fuel, brand, sort, order, userPos, radius, onlyFavorites, favorites.size]);
 
     const toggleFav = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -637,13 +656,14 @@ export default function StationFinder() {
                         )}
 
                         <button
-                            onClick={() => setOnlyFavorites(!onlyFavorites)}
+                            onClick={() => setOnlyFavorites(prev => !prev)}
                             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${onlyFavorites
-                                ? 'bg-amber-500 text-white border-amber-500 shadow-lg'
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-lg scale-105'
                                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-500'
                                 }`}
+                            title={onlyFavorites ? 'Mostrar todas las estaciones' : 'Filtrar por tus estaciones favoritas'}
                         >
-                            ⭐ {onlyFavorites ? 'Ver todas' : 'Solo favoritas'}
+                            {onlyFavorites ? '⭐ Solo favoritas activado' : '⭐ Solo favoritas'}
                         </button>
                     </div>
 
@@ -749,142 +769,144 @@ export default function StationFinder() {
                 {stations.length > 0 ? (
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 gap-4">
-                            {stations.map(s => (
-                                <div
-                                    key={s.id}
-                                    id={`station-${s.id}`}
-                                    className={`card p-5 flex flex-col sm:flex-row gap-5 transition-all group ${highlightedId === s.id ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/30' : 'hover:border-brand-500'} hover:shadow-xl active:scale-[0.99]`}
-                                >
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div>
-                                                <h3 className="font-bold text-xl group-hover:text-brand-500 transition-colors uppercase tracking-tight">{s.name || s.brand}</h3>
-                                                <p className="text-sm text-muted mt-1 font-medium">{s.address}</p>
+                            {stations
+                                .filter(s => !onlyFavorites || favorites.has(s.id))
+                                .map(s => (
+                                    <div
+                                        key={s.id}
+                                        id={`station-${s.id}`}
+                                        className={`card p-5 flex flex-col sm:flex-row gap-5 transition-all group ${highlightedId === s.id ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/30' : 'hover:border-brand-500'} hover:shadow-xl active:scale-[0.99]`}
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                                <div>
+                                                    <h3 className="font-bold text-xl group-hover:text-brand-500 transition-colors uppercase tracking-tight">{s.name || s.brand}</h3>
+                                                    <p className="text-sm text-muted mt-1 font-medium">{s.address}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={(e) => toggleFav(s.id, e)}
+                                                        className={`p-2 rounded-xl border transition-all ${favorites.has(s.id) ? 'bg-amber-50 border-amber-200 grayscale-0' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale opacity-40 hover:opacity-100'}`}
+                                                    >
+                                                        ⭐
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={(e) => toggleFav(s.id, e)}
-                                                    className={`p-2 rounded-xl border transition-all ${favorites.has(s.id) ? 'bg-amber-50 border-amber-200 grayscale-0' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale opacity-40 hover:opacity-100'}`}
-                                                >
-                                                    ⭐
-                                                </button>
+
+                                            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted font-bold mt-4">
+                                                <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🏙️ {s.municipality}</span>
+                                                {s.schedule && <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🕐 {s.schedule}</span>}
+                                                {s.distKm !== null && (
+                                                    <span className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-600 rounded-lg">📍 {s.distKm.toFixed(1)} km</span>
+                                                )}
                                             </div>
-                                        </div>
 
-                                        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted font-bold mt-4">
-                                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🏙️ {s.municipality}</span>
-                                            {s.schedule && <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">🕐 {s.schedule}</span>}
-                                            {s.distKm !== null && (
-                                                <span className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-600 rounded-lg">📍 {s.distKm.toFixed(1)} km</span>
-                                            )}
-                                        </div>
+                                            {/* Variation Block */}
+                                            <div className="mt-5">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">Variación hoy</span>
+                                                    <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {Object.entries(s.prices).map(([fKey, currentPrice]) => {
+                                                        if (!currentPrice) return null;
+                                                        const change = priceChanges.find(c => c.stationId === s.id && c.fuelCode === fKey);
+                                                        if (!change) return null;
 
-                                        {/* Variation Block */}
-                                        <div className="mt-5">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">Variación hoy</span>
-                                                <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800"></div>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {Object.entries(s.prices).map(([fKey, currentPrice]) => {
-                                                    if (!currentPrice) return null;
-                                                    const change = priceChanges.find(c => c.stationId === s.id && c.fuelCode === fKey);
-                                                    if (!change) return null;
+                                                        const isDown = change.direction === 'down';
+                                                        const colorClass = isDown ? 'text-green-600 bg-green-50/50 dark:bg-green-500/10' : 'text-red-600 bg-red-50/50 dark:bg-red-500/10';
 
-                                                    const isDown = change.direction === 'down';
-                                                    const colorClass = isDown ? 'text-green-600 bg-green-50/50 dark:bg-green-500/10' : 'text-red-600 bg-red-50/50 dark:bg-red-500/10';
-
-                                                    return (
-                                                        <div key={fKey} className={`flex flex-col px-2 py-1 rounded-lg border border-current/10 transition-all hover:scale-105 ${colorClass}`}>
-                                                            <div className="flex items-center justify-between gap-3">
-                                                                <span className="text-[8px] font-black uppercase tracking-tight opacity-70">
-                                                                    {fKey === 'dieselA' ? 'DSL A' : fKey}
-                                                                </span>
-                                                                <span className="text-[9px] font-black font-mono">{isDown ? '↓' : '↑'} {Math.abs(change.delta).toFixed(3)}€</span>
+                                                        return (
+                                                            <div key={fKey} className={`flex flex-col px-2 py-1 rounded-lg border border-current/10 transition-all hover:scale-105 ${colorClass}`}>
+                                                                <div className="flex items-center justify-between gap-3">
+                                                                    <span className="text-[8px] font-black uppercase tracking-tight opacity-70">
+                                                                        {fKey === 'dieselA' ? 'DSL A' : fKey}
+                                                                    </span>
+                                                                    <span className="text-[9px] font-black font-mono">{isDown ? '↓' : '↑'} {Math.abs(change.delta).toFixed(3)}€</span>
+                                                                </div>
+                                                                <div className="text-[8px] font-bold opacity-60 text-right leading-none mt-0.5">
+                                                                    {isDown ? '-' : '+'}{Math.abs((change.delta / change.oldPrice) * 100).toFixed(1)}%
+                                                                </div>
                                                             </div>
-                                                            <div className="text-[8px] font-bold opacity-60 text-right leading-none mt-0.5">
-                                                                {isDown ? '-' : '+'}{Math.abs((change.delta / change.oldPrice) * 100).toFixed(1)}%
-                                                            </div>
+                                                        );
+                                                    })}
+                                                    {Object.entries(s.prices).every(([fk]) => !priceChanges.some(c => c.stationId === s.id && c.fuelCode === fk)) && (
+                                                        <div className="w-full text-center py-1">
+                                                            <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest italic">Estable · Sin cambios</span>
                                                         </div>
-                                                    );
-                                                })}
-                                                {Object.entries(s.prices).every(([fk]) => !priceChanges.some(c => c.stationId === s.id && c.fuelCode === fk)) && (
-                                                    <div className="w-full text-center py-1">
-                                                        <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest italic">Estable · Sin cambios</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-4 justify-center items-end min-w-[200px]">
+                                            <div className="flex flex-wrap sm:flex-nowrap gap-3 items-center w-full sm:w-auto">
+                                                {/* Main price highlighted if selected */}
+                                                {fuel && s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices] !== null && (
+                                                    <div className="bg-brand-500 text-white rounded-xl px-5 py-3 text-center flex-1 sm:flex-none shadow-lg shadow-brand-500/20">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{fuel}</p>
+                                                        <p className="text-2xl font-black font-mono leading-none">
+                                                            {fmt(s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices])}
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {/* Other prices compact */}
+                                                <div className="grid grid-cols-2 gap-2 flex-1 sm:flex-none">
+                                                    {Object.entries(s.prices)
+                                                        .filter(([key, val]) => val !== null && (fuel ? key !== fuel : true))
+                                                        .slice(0, 2)
+                                                        .map(([key, val]) => (
+                                                            <div key={key} className="bg-slate-100 dark:bg-slate-800/80 rounded-xl px-3 py-1.5 text-center min-w-[70px] border border-transparent">
+                                                                <p className="text-[8px] font-black text-muted uppercase tracking-tighter">{key === 'dieselA' ? 'DSL A' : key}</p>
+                                                                <p className="text-xs font-black font-mono">{fmt(val as number)}</p>
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            </div>
+                                            <div className="w-full sm:w-auto flex flex-col items-center sm:items-end gap-3">
+                                                <div className="flex w-full sm:w-auto gap-2">
+                                                    <button
+                                                        onClick={(e) => openNavigation(s, e)}
+                                                        disabled={!s.lat || !s.lon}
+                                                        className={`flex-1 sm:flex-none px-6 py-2.5 min-h-[44px] rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand-500/10 ${!s.lat || !s.lon
+                                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                            : 'bg-brand-500 text-white hover:scale-105 active:scale-95'
+                                                            }`}
+                                                    >
+                                                        <span>🧭</span> {!s.lat || !s.lon ? 'Ubicación no disponible' : 'Cómo llegar'}
+                                                    </button>
+
+                                                    {s.lat && s.lon && (
+                                                        <div className="flex gap-1.5">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'maps'); }}
+                                                                className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
+                                                                title="Google Maps"
+                                                            >
+                                                                🗺️
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'waze'); }}
+                                                                className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
+                                                                title="Waze"
+                                                            >
+                                                                🚙
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {navPref && (
+                                                    <div className="hidden sm:block text-[8px] font-black text-muted uppercase tracking-widest opacity-60">
+                                                        Preferencia: {navPref === 'waze' ? '🚙 Waze' : '🗺️ Maps'}
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
-
-                                    <div className="flex flex-col gap-4 justify-center items-end min-w-[200px]">
-                                        <div className="flex flex-wrap sm:flex-nowrap gap-3 items-center w-full sm:w-auto">
-                                            {/* Main price highlighted if selected */}
-                                            {fuel && s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices] !== null && (
-                                                <div className="bg-brand-500 text-white rounded-xl px-5 py-3 text-center flex-1 sm:flex-none shadow-lg shadow-brand-500/20">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{fuel}</p>
-                                                    <p className="text-2xl font-black font-mono leading-none">
-                                                        {fmt(s.prices[fuel === 'dieselA' ? 'dieselA' : fuel as keyof typeof s.prices])}
-                                                    </p>
-                                                </div>
-                                            )}
-
-                                            {/* Other prices compact */}
-                                            <div className="grid grid-cols-2 gap-2 flex-1 sm:flex-none">
-                                                {Object.entries(s.prices)
-                                                    .filter(([key, val]) => val !== null && (fuel ? key !== fuel : true))
-                                                    .slice(0, 2)
-                                                    .map(([key, val]) => (
-                                                        <div key={key} className="bg-slate-100 dark:bg-slate-800/80 rounded-xl px-3 py-1.5 text-center min-w-[70px] border border-transparent">
-                                                            <p className="text-[8px] font-black text-muted uppercase tracking-tighter">{key === 'dieselA' ? 'DSL A' : key}</p>
-                                                            <p className="text-xs font-black font-mono">{fmt(val as number)}</p>
-                                                        </div>
-                                                    ))}
-                                            </div>
-                                        </div>
-                                        <div className="w-full sm:w-auto flex flex-col items-center sm:items-end gap-3">
-                                            <div className="flex w-full sm:w-auto gap-2">
-                                                <button
-                                                    onClick={(e) => openNavigation(s, e)}
-                                                    disabled={!s.lat || !s.lon}
-                                                    className={`flex-1 sm:flex-none px-6 py-2.5 min-h-[44px] rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand-500/10 ${!s.lat || !s.lon
-                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                                        : 'bg-brand-500 text-white hover:scale-105 active:scale-95'
-                                                        }`}
-                                                >
-                                                    <span>🧭</span> {!s.lat || !s.lon ? 'Ubicación no disponible' : 'Cómo llegar'}
-                                                </button>
-
-                                                {s.lat && s.lon && (
-                                                    <div className="flex gap-1.5">
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'maps'); }}
-                                                            className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
-                                                            title="Google Maps"
-                                                        >
-                                                            🗺️
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); startNavigation(s.lat!, s.lon!, 'waze'); }}
-                                                            className="p-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-brand-500 transition-all shadow-sm flex items-center justify-center text-xl"
-                                                            title="Waze"
-                                                        >
-                                                            🚙
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {navPref && (
-                                                <div className="hidden sm:block text-[8px] font-black text-muted uppercase tracking-widest opacity-60">
-                                                    Preferencia: {navPref === 'waze' ? '🚙 Waze' : '🗺️ Maps'}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
                         </div>
 
                         {stations.length < total && (
