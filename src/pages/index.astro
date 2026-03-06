@@ -170,22 +170,28 @@ async function loadDashboard() {
       
       const spark = (pts: number[], baseColor: string, id: string) => {
         if (!pts || pts.length < 2) return '';
-        const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 0.01;
+        const min = Math.min(...pts), max = Math.max(...pts);
+        const range = (max - min) || 0.0001; 
         const w = 120, h = 50;
+        const padding = 6; // Vertical padding for safe strokes
+        const availableH = h - (padding * 2);
         
         // Trend-based coloring
-        const isUp = pts[pts.length - 1] > pts[0];
-        const isDown = pts[pts.length - 1] < pts[0];
+        const first = pts[0], last = pts[pts.length - 1];
+        const isUp = last > first;
+        const isDown = last < first;
         const color = isUp ? '#ef4444' : (isDown ? '#22c55e' : baseColor);
         
         // Generate smooth curve points
         const points = pts.map((p, i) => {
           const x = (i / (pts.length - 1)) * w;
-          const y = h - ((p - min) / range) * (h * 0.7); // Leave padding for line stroke
+          const y = (max === min) 
+            ? h / 2 
+            : h - padding - ((p - min) / range) * availableH;
           return { x, y };
         });
 
-        // SVG Path String (Quadratic Bezier for smoothness)
+        // Path (Bezier)
         let d = `M ${points[0].x},${points[0].y}`;
         for (let i = 0; i < points.length - 1; i++) {
           const cx = (points[i].x + points[i+1].x) / 2;
@@ -194,15 +200,15 @@ async function loadDashboard() {
         }
         d += ` L ${points[points.length-1].x},${points[points.length-1].y}`;
 
-        // Fill path (closed to bottom)
-        const fillD = `${d} v ${h} H 0 Z`;
+        // Fill down to bottom
+        const fillD = `${d} V ${h} H 0 Z`;
 
         return `
-          <div class="relative w-[100px] sm:w-[140px] h-[50px] shrink-0 overflow-hidden" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05))">
-            <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block" preserveAspectRatio="none">
+          <div class="relative w-[100px] sm:w-[130px] h-[50px] shrink-0" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.03))">
+            <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block overflow-visible" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="grad-${id}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.25" />
+                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.2" />
                   <stop offset="100%" style="stop-color:${color};stop-opacity:0" />
                 </linearGradient>
               </defs>
@@ -219,29 +225,31 @@ async function loadDashboard() {
         <div class="card p-5 sm:p-6 flex flex-col gap-4 relative overflow-hidden group hover:border-brand-500 transition-all duration-300">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-xl sm:text-2xl">${icon}</span>
-            <span class="font-bold text-xs sm:text-sm text-muted uppercase tracking-wider">${title}</span>
+            <span class="font-bold text-[10px] sm:text-[11px] text-muted uppercase tracking-widest">${title}</span>
           </div>
           
           <div class="flex items-end justify-between gap-4">
             <div class="flex-1 min-w-0">
               <div class="flex items-baseline gap-1">
-                <p class="text-3xl sm:text-4xl font-black font-mono leading-none tracking-tighter">${fmtPrice(fuelData?.today)}</p>
+                <p class="text-3xl sm:text-4xl font-black font-mono leading-none tracking-tighter text-slate-900 dark:text-white">${fmtPrice(fuelData?.today)}</p>
                 <span class="text-xs font-bold text-muted uppercase tracking-tighter">€/L</span>
               </div>
               
               <div class="mt-3 space-y-1.5 font-bold">
-                <p class="text-[10px] text-muted uppercase tracking-widest">Ayer: <span class="text-slate-800 dark:text-slate-200">${fmtPrice(fuelData?.yesterday)} €</span></p>
+                <p class="text-[10px] text-muted uppercase tracking-tight">Cruce ayer: <span class="text-slate-800 dark:text-slate-200">${fmtPrice(fuelData?.yesterday)} €</span></p>
                 ${fuelData?.delta != null ? `
                   <div class="flex items-center gap-1.5 text-[11px] uppercase tracking-tighter ${fuelData.delta > 0 ? 'text-red-500' : fuelData.delta < 0 ? 'text-green-500' : 'text-slate-400'}">
-                    <span>${fuelData.delta > 0 ? '▲' : fuelData.delta < 0 ? '▼' : '▬'}</span>
+                    <span class="text-xs">${fuelData.delta > 0 ? '▲' : fuelData.delta < 0 ? '▼' : '▬'}</span>
                     <span>${fmtDelta(fuelData.delta, fuelData.deltaPct)}</span>
                   </div>
                 ` : ''}
               </div>
-              <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-3">${fuelData?.count ? fuelData.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
+              <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-2">${fuelData?.count ? fuelData.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
             </div>
             
-            ${spark(fuelData?.sparkline, color, id)}
+            <div class="mb-1">
+              ${spark(fuelData?.sparkline, color, id)}
+            </div>
           </div>
         </div>
       `;
