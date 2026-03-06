@@ -1,4 +1,1 @@
-# ads.txt - GasoIA
-# Replace YOUR_PUBLISHER_ID with your Google AdSense Publisher ID
-# Example: google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0
-google.com, ADSENSE_PUBLISHER_ID_PLACEHOLDER, DIRECT, f08c47fec0942fa0
+google.com, pub-3779816940145698, DIRECT, f08c47fec0942fa0
