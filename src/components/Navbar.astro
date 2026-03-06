@@ -14,21 +14,26 @@ const current = Astro.url.pathname;
 
 <header class="navbar" role="banner">
   <nav class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between" aria-label="Navegación principal">
-    <!-- Logo -->
-    <a href="/" class="flex items-center gap-3 shrink-0" aria-label="GasoIA - Inicio">
+    <!-- Logo & Branding -->
+    <a href="/" class="flex items-center gap-[10px] sm:gap-[14px] shrink-0 group transition-all hover:opacity-90" aria-label="GasoIA - Inicio">
       <img
-        src="/gasoia-icon.png"
-        alt="GasoIA"
-        class="h-9 w-9 object-contain"
-        width="36"
-        height="36"
+        src="/logo.png"
+        alt="GasoIA Icon"
+        class="h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] object-contain drop-shadow-sm transition-transform group-hover:scale-105"
+        width="48"
+        height="48"
       />
-      <img
-        src="/gasoia-horizontal.png"
-        alt="GasoIA – Precios de carburantes en España"
-        class="h-7 object-contain hidden sm:block"
-        height="28"
-      />
+      
+      <div class="flex items-center gap-2 sm:gap-3">
+        <img
+          src="/logo-horizontal.png"
+          alt="GasoIA Logo Horizontal"
+          class="h-[20px] sm:h-[28px] object-contain hidden md:block"
+        />
+        <span class="text-[1.4rem] sm:text-[1.6rem] font-[700] tracking-[0.3px] text-slate-900 dark:text-white leading-none">
+          Gaso<span class="text-brand-500">IA</span>
+        </span>
+      </div>
     </a>
 
     <!-- Desktop nav links -->
