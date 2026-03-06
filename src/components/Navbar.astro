@@ -19,16 +19,19 @@ const current = Astro.url.pathname;
       <img
         src="/logo.png"
         alt="GasoIA Icon"
-        class="h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] object-contain drop-shadow-sm transition-transform group-hover:scale-105"
-        width="48"
-        height="48"
+        class="h-[44px] w-[44px] sm:h-[54px] sm:w-[54px] object-contain drop-shadow-md transition-transform group-hover:scale-105"
+        width="54"
+        height="54"
       />
       
-      <img
-        src="/logo-horizontal.png"
-        alt="GasoIA Logo Horizontal"
-        class="h-[32px] sm:h-[44px] md:h-[56px] object-contain drop-shadow-sm"
-      />
+      <div class="flex flex-col justify-center">
+        <span class="text-[1.8rem] sm:text-[2.2rem] font-[900] tracking-[0.5px] text-slate-900 dark:text-white leading-[1.1]">
+          Gaso<span class="text-brand-500">IA</span>
+        </span>
+        <span class="hidden md:block text-[0.65rem] sm:text-[0.75rem] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">
+          Precios de carburantes
+        </span>
+      </div>
     </a>
 
     <!-- Desktop nav links -->
