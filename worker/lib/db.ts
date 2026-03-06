@@ -157,15 +157,15 @@ export async function getFuelAggregateForDate(
 export async function getFuelHistory(
     db: D1Database, fuel: Fuel | string, days: number
 ): Promise<DailyFuelStat[]> {
-    // Union both tables to ensure fallback if one is sparse
+    // Union both tables and group by day to avoid duplicates if backfill overlaps
     const query = `
-        SELECT day, fuel, avg_price, min_price, max_price, sample_count 
-        FROM daily_fuel_stats 
-        WHERE fuel = ? AND avg_price IS NOT NULL
-        UNION
-        SELECT date as day, fuel_type as fuel, avg_price, min_price, max_price, count as sample_count
-        FROM fuel_aggregates
-        WHERE fuel_type = ? AND scope = 'national' AND avg_price IS NOT NULL
+        SELECT day, fuel, MAX(avg_price) as avg_price, MAX(min_price) as min_price, MAX(max_price) as max_price, MAX(sample_count) as sample_count
+        FROM (
+            SELECT day, fuel, avg_price, min_price, max_price, sample_count FROM daily_fuel_stats WHERE fuel = ? AND avg_price IS NOT NULL
+            UNION ALL
+            SELECT date as day, fuel_type as fuel, avg_price, min_price, max_price, count as sample_count FROM fuel_aggregates WHERE fuel_type = ? AND scope = 'national' AND avg_price IS NOT NULL
+        )
+        GROUP BY day
         ORDER BY day DESC LIMIT ?
     `;
     return (await db.prepare(query).bind(fuel, fuel, days).all<DailyFuelStat>()).results ?? [];
@@ -175,9 +175,11 @@ export async function getFuelStatsForKPIs(db: D1Database, fuel: Fuel | string) {
     const unifiedQuery = `
         SELECT avg_price, min_price, max_price, day FROM (
             SELECT avg_price, min_price, max_price, day FROM daily_fuel_stats WHERE fuel = ? AND avg_price IS NOT NULL
-            UNION
+            UNION ALL
             SELECT avg_price, min_price, max_price, date as day FROM fuel_aggregates WHERE fuel_type = ? AND scope = 'national' AND avg_price IS NOT NULL
-        ) ORDER BY day DESC
+        ) 
+        GROUP BY day
+        ORDER BY day DESC
     `;
 
     const results = (await db.prepare(unifiedQuery).bind(fuel, fuel).all<{ avg_price: number, min_price: number, max_price: number }>()).results ?? [];

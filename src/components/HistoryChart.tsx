@@ -235,27 +235,28 @@ export default function HistoryChart() {
     const renderKPIs = () => {
         if (!data || !data.stats) return null;
         const targetFuel = (fuel === 'ALL' || !data.stats[fuel]) ? data.fuels[0] : fuel;
-        const stats = data.stats[targetFuel];
-        if (!stats) return null;
+        const stats = data.stats[targetFuel] || {};
 
-        const deltaColor = stats.deltaPct > 0 ? 'text-red-500' : stats.deltaPct < 0 ? 'text-green-500' : 'text-slate-400';
-        const deltaIcon = stats.deltaPct > 0 ? '↗' : stats.deltaPct < 0 ? '↘' : '→';
+        const deltaColor = (stats.deltaPct || 0) > 0 ? 'text-red-500' : (stats.deltaPct || 0) < 0 ? 'text-green-500' : 'text-slate-400';
+        const deltaIcon = (stats.deltaPct || 0) > 0 ? '↗' : (stats.deltaPct || 0) < 0 ? '↘' : '→';
         const sparkData = data.series[targetFuel]?.map(p => p.avg) || [];
         const fuelColor = FUEL_MAP[targetFuel]?.color || '#6366f1';
+
+        const fmt = (v: number | null | undefined) => (v != null && !isNaN(v)) ? v.toFixed(3) : '---';
 
         return (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                 <div className="card-kpi p-4 border-b-4 border-brand-500">
                     <div className="flex justify-between items-start mb-1">
                         <span className="text-[10px] font-black uppercase text-slate-400">Media hoy</span>
-                        {stats.deltaPct !== null && (
+                        {stats.deltaPct != null && (
                             <span className={`text-[10px] font-black ${deltaColor} bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full`}>
                                 {deltaIcon} {Math.abs(stats.deltaPct).toFixed(1)}%
                             </span>
                         )}
                     </div>
                     <p className="text-2xl font-black text-slate-800 dark:text-white leading-none">
-                        {stats.todayAvg ? stats.todayAvg.toFixed(3) : '---'} <span className="text-xs opacity-40">€/L</span>
+                        {fmt(stats.todayAvg)} <span className="text-xs opacity-40">€/L</span>
                     </p>
                     <div className="mt-4">
                         <Sparkline data={sparkData} color={fuelColor} height={20} />
@@ -265,21 +266,21 @@ export default function HistoryChart() {
                 <div className="card-kpi p-4 border-b-4 border-slate-300 dark:border-slate-700">
                     <span className="text-[10px] font-black uppercase text-slate-400">Media ayer</span>
                     <p className="text-2xl font-black text-slate-800 dark:text-white mt-1 leading-none">
-                        {stats.yesterdayAvg ? stats.yesterdayAvg.toFixed(3) : '---'} <span className="text-xs opacity-40">€/L</span>
+                        {fmt(stats.yesterdayAvg)} <span className="text-xs opacity-40">€/L</span>
                     </p>
                 </div>
 
                 <div className="card-kpi p-4 border-b-4 border-green-500 bg-green-50/20 dark:bg-green-500/5">
                     <span className="text-[10px] font-black uppercase text-green-600/60 transition-colors">Mín Período</span>
                     <p className="text-2xl font-black text-green-600 mt-1 leading-none">
-                        {stats.allTimeMin ? stats.allTimeMin.toFixed(3) : '---'} <span className="text-xs opacity-40">€/L</span>
+                        {fmt(stats.allTimeMin)} <span className="text-xs opacity-40">€/L</span>
                     </p>
                 </div>
 
                 <div className="card-kpi p-4 border-b-4 border-red-500 bg-red-50/20 dark:bg-red-500/5">
                     <span className="text-[10px] font-black uppercase text-red-600/60">Máx Período</span>
                     <p className="text-2xl font-black text-red-600 mt-1 leading-none">
-                        {stats.allTimeMax ? stats.allTimeMax.toFixed(3) : '---'} <span className="text-xs opacity-40">€/L</span>
+                        {fmt(stats.allTimeMax)} <span className="text-xs opacity-40">€/L</span>
                     </p>
                 </div>
             </div>
@@ -288,9 +289,10 @@ export default function HistoryChart() {
 
     const isInsufficient = useMemo(() => {
         if (loading || !data) return false;
-        // True only if EVERY active fuel has zero data points
-        return activeFuels.every(f => !data.series[f] || data.series[f].length === 0);
-    }, [data, activeFuels, loading]);
+        // Check if there is AT LEAST ONE point in the entire dataset
+        const hasAnyPoints = Object.values(data.series).some((s: any) => s && s.length > 0);
+        return !hasAnyPoints;
+    }, [data, loading]);
 
     return (
         <div className="space-y-6">
