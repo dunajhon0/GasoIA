@@ -1,0 +1,75 @@
+
+> gasoia@0.1.0 build
+> astro build
+
+10:14:39 [WARN] [@astrojs/cloudflare] The current configuration does not support image optimization. To allow your project to build with the original, unoptimized images, the image service has been automatically switched to the 'noop' option. See https://docs.astro.build/en/reference/configuration-reference/#imageservice
+10:14:39 [types] Generated 157ms
+10:14:39 [build] output: "hybrid"
+10:14:39 [build] directory: C:\Users\herme\OneDrive\Escritorio\proyectos\PROYECTOS ANTIGRAVITY\WEB GASOLINA\dist\
+10:14:39 [build] adapter: @astrojs/cloudflare
+10:14:39 [build] Collecting build info...
+10:14:39 [build] Ô£ô Completed in 248ms.
+10:14:39 [build] Building hybrid entrypoints...
+Circular chunk: astro -> @astrojs -> astro. Please adjust the manual chunk logic for these chunks.
+Generated an empty chunk: "ultrahtml".
+10:14:51 [vite] [32mÔ£ô built in 11.56s[39m
+10:14:51 [build] Ô£ô Completed in 11.62s.
+
+ building client (vite) 
+10:14:51 [vite] transforming...
+10:14:51 [WARN] [vite] [1m[33m[plugin:vite:esbuild][39m[22m [33m[plugin vite:esbuild] src/pages/comparador.astro?astro&type=script&index=0&lang.ts: [33mThe "??" operator here will always return the left operand[33m
+19 |      const avgA = avg(ra.stations ?? []);
+20 |      const avgB = avg(rb.stations ?? []);
+21 |      const fmt  = (p: number|null) => p?.toFixed(3) + ' Ôé¼' ?? 'ÔÇö';
+   |                                                              ^
+22 |  
+23 |      const renderCard = (city: string, data: typeof avgA) => `
+[39m
+10:14:58 [vite] [32mÔ£ô[39m 642 modules transformed.
+10:14:58 [vite] rendering chunks...
+10:14:59 [vite] computing gzip size...
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.DwSjMXOA.js         [39m[1m[2m    0.17 kB[22m[1m[22m[2m Ôöé gzip:   0.16 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.CO7WMRex.js         [39m[1m[2m    0.41 kB[22m[1m[22m[2m Ôöé gzip:   0.30 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.DzLGPUmo.js         [39m[1m[2m    0.58 kB[22m[1m[22m[2m Ôöé gzip:   0.27 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/jsx-runtime.CYiYLu1p.js     [39m[1m[2m    0.92 kB[22m[1m[22m[2m Ôöé gzip:   0.58 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.CzdSrn4n.js         [39m[1m[2m    1.68 kB[22m[1m[22m[2m Ôöé gzip:   0.81 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.sxlUU0LK.js         [39m[1m[2m    1.75 kB[22m[1m[22m[2m Ôöé gzip:   0.85 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.C_dvk40L.js         [39m[1m[2m    2.13 kB[22m[1m[22m[2m Ôöé gzip:   0.97 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/FuelsTable.DkKnuSNX.js      [39m[1m[2m    2.21 kB[22m[1m[22m[2m Ôöé gzip:   0.96 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/CookieBanner.rHkBVrNr.js    [39m[1m[2m    2.89 kB[22m[1m[22m[2m Ôöé gzip:   1.14 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/BrandChart.BCVbqVqW.js      [39m[1m[2m    3.75 kB[22m[1m[22m[2m Ôöé gzip:   1.79 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/TripCalculator.DkcgiTJ7.js  [39m[1m[2m    4.11 kB[22m[1m[22m[2m Ôöé gzip:   1.49 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/CitiesTable.Cbr39-_-.js     [39m[1m[2m    5.61 kB[22m[1m[22m[2m Ôöé gzip:   2.24 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/hoisted.RPvIcVLv.js         [39m[1m[2m    5.82 kB[22m[1m[22m[2m Ôöé gzip:   2.33 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/index.CZlPm10g.js           [39m[1m[2m    6.84 kB[22m[1m[22m[2m Ôöé gzip:   2.74 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/HistoryChart.5TU10R1q.js    [39m[1m[2m   10.37 kB[22m[1m[22m[2m Ôöé gzip:   3.72 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/StationFinder.C7FckTwC.js   [39m[1m[2m   28.34 kB[22m[1m[22m[2m Ôöé gzip:   7.76 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/client.D6oT_UZE.js          [39m[1m[2m  135.60 kB[22m[1m[22m[2m Ôöé gzip:  43.80 kB[22m
+10:14:59 [vite] [2mdist/[22m[36m_astro/index.BrMPvLIj.js           [39m[1m[33m1,052.15 kB[39m[22m[2m Ôöé gzip: 349.71 kB[22m
+10:14:59 [WARN] [vite] [33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+10:14:59 [vite] [32mÔ£ô built in 7.75s[39m
+
+ prerendering static routes 
+10:14:59 ÔûÂ src/pages/contacto.astro
+10:14:59   ÔööÔöÇ /contacto/index.html (+17ms)
+10:14:59 ÔûÂ src/pages/legal/cookies.astro
+10:14:59   ÔööÔöÇ /legal/cookies/index.html (+6ms)
+10:14:59 ÔûÂ src/pages/legal/privacidad.astro
+10:14:59   ÔööÔöÇ /legal/privacidad/index.html (+6ms)
+10:14:59 ÔûÂ src/pages/legal/terminos.astro
+10:14:59   ÔööÔöÇ /legal/terminos/index.html (+8ms)
+10:14:59 ÔûÂ src/pages/sitemap.xml.astro
+EEXIST: file already exists, mkdir 'C:\Users\herme\OneDrive\Escritorio\proyectos\PROYECTOS ANTIGRAVITY\WEB GASOLINA\dist\sitemap.xml'
+  Location:
+    C:\Users\herme\OneDrive\Escritorio\proyectos\PROYECTOS ANTIGRAVITY\WEB GASOLINA\node_modules\astro\dist\core\build\generate.js:363:3
+  Stack trace:
+    at async Object.mkdir (node:internal/fs/promises:860:10)
+    at async generatePathWithLogs (file:///C:/Users/herme/OneDrive/Escritorio/proyectos/PROYECTOS%20ANTIGRAVITY/WEB%20GASOLINA/node_modules/astro/dist/core/build/generate.js:153:5)
+    at async generatePages (file:///C:/Users/herme/OneDrive/Escritorio/proyectos/PROYECTOS%20ANTIGRAVITY/WEB%20GASOLINA/node_modules/astro/dist/core/build/generate.js:91:11)
+    at async AstroBuilder.build (file:///C:/Users/herme/OneDrive/Escritorio/proyectos/PROYECTOS%20ANTIGRAVITY/WEB%20GASOLINA/node_modules/astro/dist/core/build/index.js:149:5)
+    at async build (file:///C:/Users/herme/OneDrive/Escritorio/proyectos/PROYECTOS%20ANTIGRAVITY/WEB%20GASOLINA/node_modules/astro/dist/core/build/index.js:51:3)
+10:14:59   ÔööÔöÇ /sitemap.xml/index.html

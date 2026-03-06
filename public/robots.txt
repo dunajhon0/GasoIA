@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://gasoia.com/sitemap.xml
+Sitemap: https://gasoia.dunajhon.com/sitemap.xml
