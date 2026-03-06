@@ -171,26 +171,32 @@ async function loadDashboard() {
       const spark = (pts: number[], baseColor: string, id: string) => {
         if (!pts || pts.length === 0) return '';
         
-        const w = 140, h = 60, padding = 8;
+        // Fixed internal coordinate system based on desktop size
+        const w = 120, h = 44, padding = 4;
         const availableH = h - (padding * 2);
-        const min = Math.min(...pts), max = Math.max(...pts);
+        
+        // Filter out NaNs just in case
+        const validPts = pts.filter(p => p != null && !isNaN(p));
+        if (validPts.length === 0) return '';
+        
+        const min = Math.min(...validPts), max = Math.max(...validPts);
         const range = (max - min) || 0.0001;
         
-        console.log(`[Dashboard] Sparkline ${id}: ${pts.length} pts`, pts);
+        console.log(`[Dashboard] Sparkline ${id}: ${validPts.length} pts`, validPts);
 
         // Handle 1 point case or all points equal
-        const isSinglePoint = pts.length === 1;
+        const isSinglePoint = validPts.length === 1;
         const allPointsEqual = max === min;
         
         // Trend-based coloring
-        const first = pts[0], last = pts[pts.length - 1];
+        const first = validPts[0], last = validPts[validPts.length - 1];
         const isUp = !isSinglePoint && last > first;
         const isDown = !isSinglePoint && last < first;
         const color = isUp ? '#ef4444' : (isDown ? '#22c55e' : baseColor);
         
         // Generate smooth curve points
-        const points = pts.map((p, i) => {
-          const x = isSinglePoint ? w / 2 : (i / (pts.length - 1)) * w;
+        const points = validPts.map((p, i) => {
+          const x = isSinglePoint ? w / 2 : (i / (validPts.length - 1)) * w;
           const y = (isSinglePoint || allPointsEqual) 
             ? h / 2 
             : h - padding - ((p - min) / range) * availableH;
@@ -211,20 +217,10 @@ async function loadDashboard() {
             d += ` L ${points[points.length-1].x},${points[points.length-1].y}`;
         }
 
-        // Fill down to bottom
-        const fillD = isSinglePoint ? '' : `${d} V ${h} H 0 Z`;
-
         return `
-          <div class="relative w-[100px] sm:w-[140px] h-[40px] sm:h-[50px] shrink-0 pointer-events-none" style="filter: drop-shadow(0 4px 6px ${color}20)">
-            <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block overflow-visible" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="grad-${id}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.2" />
-                  <stop offset="100%" style="stop-color:${color};stop-opacity:0" />
-                </linearGradient>
-              </defs>
-              ${fillD ? `<path d="${fillD}" fill="url(#grad-${id})" />` : ''}
-              <path d="${d}" fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+          <div class="relative w-[90px] sm:w-[120px] h-[32px] sm:h-[44px] shrink-0 pointer-events-none">
+            <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block overflow-visible shrink-0" preserveAspectRatio="none">
+              <path d="${d}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </div>
         `;

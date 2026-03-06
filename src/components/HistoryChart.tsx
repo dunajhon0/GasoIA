@@ -24,6 +24,9 @@ interface HistoryData {
     fuels: string[];
     series: Record<string, any[]>;
     stats: Record<string, any>;
+    insufficient?: boolean;
+    singlePoint?: boolean;
+    backfillScheduled?: boolean;
 }
 
 function Sparkline({ data, color, height = 30 }: { data: number[], color: string, height?: number }) {
@@ -101,13 +104,32 @@ export default function HistoryChart() {
             const json = await res.json();
             setData(json);
         } catch (e) {
-            setError((e as Error).message);
+            // Only set error if we don't already have some data, to avoid breaking polling
+            if (!data) setError((e as Error).message);
         } finally {
             setLoading(false);
         }
-    }, [fuel, range]);
+    }, [fuel, range, data]);
 
     useEffect(() => { load(); }, [load]);
+
+    // ── Auto-Polling for Backfill ────────────────────────────────────────────
+    useEffect(() => {
+        if (data?.backfillScheduled && data?.insufficient) {
+            console.log('[HistoryUI] Backfill scheduled, polling every 15s...');
+            const timer = setInterval(() => {
+                // Fetch silently without triggering skeleton loading
+                fetch(`/api/history?fuel=${fuel}&range=${range}`)
+                    .then(r => r.json())
+                    .then(json => {
+                        setData(json);
+                        if (!json.insufficient) clearInterval(timer);
+                    })
+                    .catch(console.error);
+            }, 15000);
+            return () => clearInterval(timer);
+        }
+    }, [data?.backfillScheduled, data?.insufficient, fuel, range]);
 
     const activeFuels = useMemo(() => {
         if (!data) return [];
@@ -302,7 +324,7 @@ export default function HistoryChart() {
 
     const isInsufficient = useMemo(() => {
         if (loading || !data) return false;
-        // Check if there is AT LEAST ONE point in the entire dataset
+        if (data.insufficient !== undefined) return data.insufficient;
         const hasAnyPoints = Object.values(data.series).some((s: any) => s && s.length > 0);
         return !hasAnyPoints;
     }, [data, loading]);
@@ -369,13 +391,29 @@ export default function HistoryChart() {
                     <div className="card p-4 sm:p-8 shadow-2xl relative bg-white/50 dark:bg-slate-900/40 backdrop-blur-sm border-2 border-slate-50 dark:border-slate-800/50">
                         {isInsufficient ? (
                             <div className="h-[300px] sm:h-[420px] flex flex-col items-center justify-center text-center p-8 space-y-4">
-                                <div className="text-6xl animate-pulse">📈</div>
-                                <div>
-                                    <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg">Histórico insuficiente</h3>
-                                    <p className="text-xs text-muted font-medium max-w-[240px] mx-auto mt-2">
-                                        No hemos encontrado registros suficientes de precios oficiales para <strong>{fuel !== 'ALL' ? FUEL_MAP[fuel]?.label : 'estos combustibles'}</strong> en los últimos {range} días.
-                                    </p>
-                                </div>
+                                {data?.backfillScheduled ? (
+                                    <>
+                                        <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <div>
+                                            <h3 className="font-black text-brand-600 dark:text-brand-400 uppercase tracking-tight text-lg animate-pulse">
+                                                Rellenando histórico...
+                                            </h3>
+                                            <p className="text-xs text-brand-600/70 dark:text-brand-400/70 font-medium max-w-[280px] mx-auto mt-2">
+                                                Obteniendo datos oficiales del Ministerio para este rango. El gráfico aparecerá automáticamente en unos segundos.
+                                            </p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="text-6xl animate-pulse">📈</div>
+                                        <div>
+                                            <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg">Histórico insuficiente</h3>
+                                            <p className="text-xs text-muted font-medium max-w-[240px] mx-auto mt-2">
+                                                No hemos encontrado registros suficientes de precios oficiales para <strong>{fuel !== 'ALL' ? FUEL_MAP[fuel as Fuel]?.label : 'estos combustibles'}</strong> en los últimos {range} días.
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         ) : (
                             renderChart()

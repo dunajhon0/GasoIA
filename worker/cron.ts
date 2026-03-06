@@ -22,6 +22,7 @@ import {
     type CityAggregate,
 } from './lib/db';
 import { FUEL_MAP } from './lib/fuels';
+import { backfillMissingHistory } from './lib/backfill';
 
 const TOP_CITIES: Record<string, string> = {
     'MADRID': 'Madrid',
@@ -158,6 +159,13 @@ export async function runCron(db: D1Database): Promise<void> {
             diesel_a_avg: calcAvg(brandStations.map(s => s.prices.dieselA)),
             station_count: brandStations.length,
         });
+    }
+
+    // 7. Incremental historical backfill (max 3 days per cron run to prevent timeouts)
+    try {
+        await backfillMissingHistory(db, { targetDays: 180, maxDaysPerRun: 3 });
+    } catch (e) {
+        console.error('[GasoIA Cron] Error during historical backfill:', e);
     }
 
     console.log('[GasoIA Cron] Daily update complete.');
