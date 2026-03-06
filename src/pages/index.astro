@@ -117,70 +117,107 @@ export const prerender = false;
 <script>
 async function loadDashboard() {
   try {
-    const [summaryRes, citiesRes, histSp95Res] = await Promise.all([
+    const [summaryRes, citiesRes] = await Promise.all([
       fetch('/api/summary'),
       fetch('/api/cities/top10'),
-      fetch('/api/history?fuel=sp95&days=30'),
     ]);
     const summary = summaryRes.ok ? await summaryRes.json() : null;
     const cities  = citiesRes.ok  ? await citiesRes.json() : null;
-    const histSp95= histSp95Res.ok? await histSp95Res.json() : null;
 
     // ── Price cards ──────────────────────────────────────────────────────────
     const cardsEl = document.getElementById('price-cards');
     if (cardsEl && summary) {
       const sp95 = summary.sp95;
       const diesel = summary.dieselA;
-      const sparkPoints = (histSp95?.series ?? []).map((s: {date:string;price:number}) => s.price);
 
-      const fmtPrice = (p: number | null) => p != null ? p.toFixed(3) + ' €/L' : '—';
+      const fmtPrice = (p: number | null) => p != null ? p.toFixed(3) : '—';
       const fmtDelta = (d: number | null, pct: number | null) => {
         if (d == null) return '';
         const sign = d > 0 ? '+' : '';
         return `${sign}${d.toFixed(4)} € (${sign}${(pct ?? 0).toFixed(2)}%)`;
       };
-      const deltaClass = (d: number | null) => d == null ? '' : d > 0 ? 'price-up' : d < 0 ? 'price-down' : 'price-even';
-      const spark = (pts: number[], color: string) => {
-        if (pts.length < 2) return '';
-        const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1;
-        const w = 80, h = 36;
-        const poly = pts.map((p, i) => {
+      
+      const spark = (pts: number[], baseColor: string, id: string) => {
+        if (!pts || pts.length < 2) return '';
+        const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 0.01;
+        const w = 120, h = 50;
+        
+        // Trend-based coloring
+        const isUp = pts[pts.length - 1] > pts[0];
+        const isDown = pts[pts.length - 1] < pts[0];
+        const color = isUp ? '#ef4444' : (isDown ? '#22c55e' : baseColor);
+        
+        // Generate smooth curve points
+        const points = pts.map((p, i) => {
           const x = (i / (pts.length - 1)) * w;
-          const y = h - ((p - min) / range) * (h * 0.85);
-          return `${x.toFixed(1)},${y.toFixed(1)}`;
-        }).join(' ');
-        return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${poly}"/></svg>`;
+          const y = h - ((p - min) / range) * (h * 0.7); // Leave padding for line stroke
+          return { x, y };
+        });
+
+        // SVG Path String (Quadratic Bezier for smoothness)
+        let d = `M ${points[0].x},${points[0].y}`;
+        for (let i = 0; i < points.length - 1; i++) {
+          const cx = (points[i].x + points[i+1].x) / 2;
+          const cy = (points[i].y + points[i+1].y) / 2;
+          d += ` Q ${points[i].x},${points[i].y} ${cx},${cy}`;
+        }
+        d += ` L ${points[points.length-1].x},${points[points.length-1].y}`;
+
+        // Fill path (closed to bottom)
+        const fillD = `${d} v ${h} H 0 Z`;
+
+        return `
+          <div class="relative w-[100px] sm:w-[140px] h-[50px] shrink-0 overflow-hidden" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05))">
+            <svg viewBox="0 0 ${w} ${h}" class="w-full h-full block" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="grad-${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" style="stop-color:${color};stop-opacity:0.25" />
+                  <stop offset="100%" style="stop-color:${color};stop-opacity:0" />
+                </linearGradient>
+              </defs>
+              <path d="${fillD}" fill="url(#grad-${id})" />
+              <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        `;
       };
 
       const sp95Color = '#6366f1', dieselColor = '#f59e0b';
-      cardsEl.innerHTML = `
-        <div class="card p-5 sm:p-6 flex flex-col gap-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="text-2xl">⛽</span>
-              <span class="font-semibold text-sm text-muted">Gasolina 95 (SP95)</span>
+      
+      const renderCard = (title: string, icon: string, fuelData: any, color: string, id: string) => `
+        <div class="card p-5 sm:p-6 flex flex-col gap-4 relative overflow-hidden group hover:border-brand-500 transition-all duration-300">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xl sm:text-2xl">${icon}</span>
+            <span class="font-bold text-xs sm:text-sm text-muted uppercase tracking-wider">${title}</span>
+          </div>
+          
+          <div class="flex items-end justify-between gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-baseline gap-1">
+                <p class="text-3xl sm:text-4xl font-black font-mono leading-none tracking-tighter">${fmtPrice(fuelData?.today)}</p>
+                <span class="text-xs font-bold text-muted uppercase tracking-tighter">€/L</span>
+              </div>
+              
+              <div class="mt-3 space-y-1.5 font-bold">
+                <p class="text-[10px] text-muted uppercase tracking-widest">Ayer: <span class="text-slate-800 dark:text-slate-200">${fmtPrice(fuelData?.yesterday)} €</span></p>
+                ${fuelData?.delta != null ? `
+                  <div class="flex items-center gap-1.5 text-[11px] uppercase tracking-tighter ${fuelData.delta > 0 ? 'text-red-500' : fuelData.delta < 0 ? 'text-green-500' : 'text-slate-400'}">
+                    <span>${fuelData.delta > 0 ? '▲' : fuelData.delta < 0 ? '▼' : '▬'}</span>
+                    <span>${fmtDelta(fuelData.delta, fuelData.deltaPct)}</span>
+                  </div>
+                ` : ''}
+              </div>
+              <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-3">${fuelData?.count ? fuelData.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
             </div>
-            ${spark(sparkPoints, sp95Color)}
+            
+            ${spark(fuelData?.sparkline, color, id)}
           </div>
-          <div>
-            <p class="text-3xl font-bold font-mono">${fmtPrice(sp95?.today)}</p>
-            <p class="text-xs text-muted mt-0.5">Ayer: <span class="font-medium">${fmtPrice(sp95?.yesterday)}</span></p>
-          </div>
-          ${sp95?.delta != null ? `<div class="flex items-center gap-1.5 text-sm font-semibold ${deltaClass(sp95.delta)}"><span>${sp95.delta > 0 ? '▲' : sp95.delta < 0 ? '▼' : '→'}</span><span>${fmtDelta(sp95.delta, sp95.deltaPct)}</span></div>` : ''}
-          <p class="text-xs text-muted">${sp95?.count ? sp95.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
         </div>
-        <div class="card p-5 sm:p-6 flex flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <span class="text-2xl">🚛</span>
-            <span class="font-semibold text-sm text-muted">Gasóleo A (Diesel)</span>
-          </div>
-          <div>
-            <p class="text-3xl font-bold font-mono">${fmtPrice(diesel?.today)}</p>
-            <p class="text-xs text-muted mt-0.5">Ayer: <span class="font-medium">${fmtPrice(diesel?.yesterday)}</span></p>
-          </div>
-          ${diesel?.delta != null ? `<div class="flex items-center gap-1.5 text-sm font-semibold ${deltaClass(diesel.delta)}"><span>${diesel.delta > 0 ? '▲' : diesel.delta < 0 ? '▼' : '→'}</span><span>${fmtDelta(diesel.delta, diesel.deltaPct)}</span></div>` : ''}
-          <p class="text-xs text-muted">${diesel?.count ? diesel.count.toLocaleString('es-ES') + ' gasolineras' : ''}</p>
-        </div>
+      `;
+
+      cardsEl.innerHTML = `
+        ${renderCard('Gasolina 95 (SP95)', '⛽', sp95, sp95Color, 'sp95')}
+        ${renderCard('Gasóleo A (Diesel)', '🚛', diesel, dieselColor, 'diesel')}
       `;
     }
 
