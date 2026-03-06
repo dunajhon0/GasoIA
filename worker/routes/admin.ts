@@ -3,14 +3,7 @@ import type { Env } from '../index';
 import { fetchMineturHistoricalData, calcAvg, calcMin, calcMax } from '../lib/minetur';
 import { upsertDailyFuelStat } from '../lib/db';
 
-const FUEL_FIELDS = [
-    { db: 'sp95', field: 'sp95' },
-    { db: 'diesel_a', field: 'dieselA' },
-    { db: 'sp98', field: 'sp98' },
-    { db: 'diesel_a_plus', field: 'dieselAPlus' },
-    { db: 'glp', field: 'glp' },
-    { db: 'gnc', field: 'gnc' },
-];
+import { FUEL_MAP } from '../lib/fuels';
 
 export async function rebuildHistoryRoute(c: Context<{ Bindings: Env }>) {
     const authHeader = c.req.header('Authorization');
@@ -59,7 +52,8 @@ export async function rebuildHistoryRoute(c: Context<{ Bindings: Env }>) {
                 continue;
             }
 
-            for (const { db: fuelDb, field } of FUEL_FIELDS) {
+            for (const [fuelDb, meta] of Object.entries(FUEL_MAP)) {
+                const field = meta.field;
                 const vals = stations.map(s => (s.prices as any)[field] as number | null);
                 const avg = calcAvg(vals);
                 if (avg === null) continue;

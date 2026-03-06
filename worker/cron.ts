@@ -21,6 +21,7 @@ import {
     type Scope,
     type CityAggregate,
 } from './lib/db';
+import { FUEL_MAP } from './lib/fuels';
 
 const TOP_CITIES: Record<string, string> = {
     'MADRID': 'Madrid',
@@ -41,24 +42,8 @@ const TOP_BRANDS = [
     'MEROIL', 'EROSKI', 'SUMA', 'CAMPSA',
 ];
 
-const FUEL_KEYS: { db: Fuel; field: keyof ReturnType<typeof getStationPrices> }[] = [
-    { db: 'sp95', field: 'sp95' },
-    { db: 'sp98', field: 'sp98' },
-    { db: 'diesel_a', field: 'dieselA' },
-    { db: 'diesel_a_plus', field: 'dieselAPlus' },
-    { db: 'diesel_b', field: 'dieselB' },
-    { db: 'diesel_c', field: 'dieselC' },
-    { db: 'biodiesel', field: 'biodiesel' },
-    { db: 'glp', field: 'glp' },
-    { db: 'gnc', field: 'gnc' },
-];
-
 function getStationPrices(s: { prices: Record<string, number | null> }) {
-    return s.prices as {
-        sp95: number | null; sp98: number | null; dieselA: number | null;
-        dieselAPlus: number | null; dieselB: number | null; dieselC: number | null;
-        biodiesel: number | null; glp: number | null; gnc: number | null;
-    };
+    return s.prices as Record<string, number | null>;
 }
 
 export async function runCron(db: D1Database): Promise<void> {
@@ -87,8 +72,9 @@ export async function runCron(db: D1Database): Promise<void> {
     ];
 
     for (const { scope, data } of scopes) {
-        for (const { db: fuelDb, field } of FUEL_KEYS) {
-            const vals = data.map(s => s.prices[field as keyof typeof s.prices] as number | null);
+        for (const [fuelDb, meta] of Object.entries(FUEL_MAP)) {
+            const field = meta.field;
+            const vals = data.map(s => (s.prices as Record<string, any>)[field] as number | null);
             const avg = calcAvg(vals);
             const min = calcMin(vals);
             const max = calcMax(vals);
@@ -96,7 +82,7 @@ export async function runCron(db: D1Database): Promise<void> {
 
             await upsertFuelAggregate(db, {
                 date: today,
-                fuel_type: fuelDb,
+                fuel_type: fuelDb as Fuel,
                 scope,
                 avg_price: avg,
                 min_price: min,
@@ -139,7 +125,7 @@ export async function runCron(db: D1Database): Promise<void> {
             province: agg.province,
             sp95_avg: calcAvg(agg.sp95),
             diesel_a_avg: calcAvg(agg.dieselA),
-            station_count: Math.max(agg.sp95.length, agg.dieselA.length, 1), // Approximate
+            station_count: Math.max(agg.sp95.length, agg.dieselA.length, 1),
         });
     }
 

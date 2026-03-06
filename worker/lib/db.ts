@@ -4,7 +4,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { NormalizedStation } from './minetur';
 
-export type Fuel = 'sp95' | 'sp98' | 'diesel_a' | 'diesel_a_plus' | 'diesel_b' | 'diesel_c' | 'biodiesel' | 'glp' | 'gnc';
+import type { Fuel } from './fuels';
+export type { Fuel };
 export type Scope = 'national' | 'peninsula' | 'baleares' | 'canarias';
 
 export interface FuelAggregate {

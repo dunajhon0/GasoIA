@@ -10,16 +10,7 @@ interface FuelMeta {
     color: string;
 }
 
-const FUEL_MAP: Record<string, FuelMeta> = {
-    'sp95': { label: 'Gasolina 95 (SP95)', color: '#6366f1' },
-    'diesel_a': { label: 'Gasóleo A (Diesel)', color: '#f59e0b' },
-    'sp98': { label: 'Gasolina 98 (SP98)', color: '#8b5cf6' },
-    'diesel_a_plus': { label: 'Gasóleo A+ (Diesel+)', color: '#ea580c' },
-    'glp': { label: 'GLP', color: '#10b981' },
-    'gnc': { label: 'GNC', color: '#3b82f6' },
-    'diesel_b': { label: 'Gasóleo B (Agrícola)', color: '#94a3b8' },
-    'biodiesel': { label: 'Biodiesel', color: '#84cc16' },
-};
+import { FUEL_MAP, type Fuel } from '../../worker/lib/fuels';
 
 const RANGE_OPTIONS = [
     { label: '7D', value: 7 },
@@ -64,8 +55,30 @@ function Sparkline({ data, color, height = 30 }: { data: number[], color: string
 }
 
 export default function HistoryChart() {
-    const [fuel, setFuel] = useState<string>('sp95');
+    const [fuel, setFuel] = useState<Fuel | 'ALL'>('sp95');
     const [range, setRange] = useState<RangeDays>(30);
+
+    // ── Sync with URL ────────────────────────────────────────────────────────
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const f = params.get('fuel') as Fuel | 'ALL' | null;
+        const r = parseInt(params.get('range') || '0', 10);
+
+        if (f && (f === 'ALL' || FUEL_MAP[f as Fuel])) {
+            setFuel(f);
+        }
+        if (r && [7, 30, 90, 180].includes(r)) {
+            setRange(r);
+        }
+    }, []);
+
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('fuel', fuel);
+        url.searchParams.set('range', range.toString());
+        window.history.replaceState({}, '', url.toString());
+    }, [fuel, range]);
+
     const [data, setData] = useState<HistoryData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -100,7 +113,7 @@ export default function HistoryChart() {
         if (!data) return [];
         if (fuel !== 'ALL') return [fuel];
         // Ensure fuels returned by API exist in map
-        return data.fuels.filter(f => FUEL_MAP[f]);
+        return data.fuels.filter(f => FUEL_MAP[f as Fuel]);
     }, [data, fuel]);
 
     const renderChart = () => {
@@ -185,7 +198,7 @@ export default function HistoryChart() {
                 textStyle: { color: isDark ? '#cbd5e1' : '#475569', fontSize: 11 }
             },
             series: activeFuels.map(f => {
-                const meta = FUEL_MAP[f] || { color: '#6366f1', label: f.toUpperCase() };
+                const meta = FUEL_MAP[f as Fuel] || { color: '#6366f1', label: f.toUpperCase() };
                 const points = data.series[f] || [];
 
                 // Map points to sorted dates, filling gaps with null
@@ -239,8 +252,8 @@ export default function HistoryChart() {
 
         const deltaColor = (stats.deltaPct || 0) > 0 ? 'text-red-500' : (stats.deltaPct || 0) < 0 ? 'text-green-500' : 'text-slate-400';
         const deltaIcon = (stats.deltaPct || 0) > 0 ? '↗' : (stats.deltaPct || 0) < 0 ? '↘' : '→';
-        const sparkData = data.series[targetFuel]?.map(p => p.avg) || [];
-        const fuelColor = FUEL_MAP[targetFuel]?.color || '#6366f1';
+        const sparkData = data.series[targetFuel]?.map((p: any) => p.avg) || [];
+        const fuelColor = FUEL_MAP[targetFuel as Fuel]?.color || '#6366f1';
 
         const fmt = (v: number | null | undefined) => (v != null && !isNaN(v)) ? v.toFixed(3) : '---';
 
@@ -309,7 +322,7 @@ export default function HistoryChart() {
                     {Object.entries(FUEL_MAP).map(([key, meta]) => (
                         <button
                             key={key}
-                            onClick={() => setFuel(key)}
+                            onClick={() => setFuel(key as Fuel)}
                             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${fuel === key
                                 ? 'text-white shadow-xl scale-105'
                                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-brand-500'}`}
@@ -360,7 +373,7 @@ export default function HistoryChart() {
                                 <div>
                                     <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg">Histórico insuficiente</h3>
                                     <p className="text-xs text-muted font-medium max-w-[240px] mx-auto mt-2">
-                                        No hemos encontrado registros suficientes de precios oficiales para <strong>{FUEL_MAP[fuel]?.label || 'este combustible'}</strong> en los últimos {range} días.
+                                        No hemos encontrado registros suficientes de precios oficiales para <strong>{fuel !== 'ALL' ? FUEL_MAP[fuel]?.label : 'estos combustibles'}</strong> en los últimos {range} días.
                                     </p>
                                 </div>
                             </div>

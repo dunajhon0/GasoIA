@@ -3,67 +3,23 @@ import type { Env } from '../index';
 import { getFuelHistory, getFuelStatsForKPIs } from '../lib/db';
 import type { Fuel } from '../lib/db';
 
-const FUEL_ALIASES: Record<string, string> = {
-    'gasolina95': 'sp95',
-    'gasolina_95': 'sp95',
-    'gasolina-95': 'sp95',
-    'sp95': 'sp95',
-    'gasolina 95': 'sp95',
-    'gasolina 95 e5': 'sp95',
-    'gasolina 95 e10': 'sp95',
-    'gasolina 95 (sp95)': 'sp95',
-    'sp98': 'sp98',
-    'gasolina98': 'sp98',
-    'gasolina_98': 'sp98',
-    'gasolina-98': 'sp98',
-    'gasolina 98 e5': 'sp98',
-    'gasolina 98 e10': 'sp98',
-    'gasolina 98 (sp98)': 'sp98',
-    'diesel': 'diesel_a',
-    'diesel_a': 'diesel_a',
-    'gasoleo a': 'diesel_a',
-    'gasoleoa': 'diesel_a',
-    'gasoleo_a': 'diesel_a',
-    'gasóleo a': 'diesel_a',
-    'gasóleo a (diesel)': 'diesel_a',
-    'goa': 'diesel_a',
-    'diesel_a_plus': 'diesel_a_plus',
-    'diesel_plus': 'diesel_a_plus',
-    'diesel a+': 'diesel_a_plus',
-    'gasoleo a+': 'diesel_a_plus',
-    'gasóleo a+': 'diesel_a_plus',
-    'gasoleoa_plus': 'diesel_a_plus',
-    'glp': 'glp',
-    'gnc': 'gnc',
-    'gnl': 'gnc',
-    'diesel_b': 'diesel_b',
-    'gasoleo b': 'diesel_b',
-    'gasóleo b': 'diesel_b',
-    'biodiesel': 'biodiesel'
-};
-
-const VALID_FUELS = Object.values(FUEL_ALIASES);
-const ALL_FUELS = ['sp95', 'diesel_a', 'diesel_a_plus', 'sp98', 'glp', 'gnc'];
-
-function normalizeFuel(f: string): string {
-    const clean = f.toLowerCase().trim();
-    return FUEL_ALIASES[clean] || clean;
-}
+import { normalizeFuel, FUEL_MAP } from '../lib/fuels';
 
 export async function historyRoute(c: Context<{ Bindings: Env }>) {
-    const rawFuel = c.req.query('fuel') ?? 'sp95';
-    const fuelParam = normalizeFuel(rawFuel);
-    const daysParam = parseInt(c.req.query('range') ?? c.req.query('days') ?? '30', 10);
+    const rawFuel = c.req.query('fuel') || 'sp95';
+    const fuelKey = normalizeFuel(rawFuel);
+    const daysParam = parseInt(c.req.query('range') || c.req.query('days') || '30', 10);
     const days = isNaN(daysParam) ? 30 : daysParam;
 
-    const fuelsToFetch = fuelParam.toUpperCase() === 'ALL'
-        ? ALL_FUELS
-        : FUEL_ALIASES[fuelParam] ? [FUEL_ALIASES[fuelParam]] : ['sp95'];
+    const isAll = rawFuel.toLowerCase() === 'all';
+    const fuelsToFetch = isAll
+        ? (Object.keys(FUEL_MAP) as (keyof typeof FUEL_MAP)[])
+        : fuelKey ? [fuelKey] : ['sp95' as const];
 
     const series: Record<string, any[]> = {};
     const stats: Record<string, any> = {};
 
-    console.log(`[HistoryAPI] Fetching ${fuelsToFetch.join(', ')} for ${days} days`);
+    console.log(`[HistoryAPI] Fetching ${isAll ? 'ALL' : fuelsToFetch.join(', ')} for ${days} days`);
 
     for (const f of fuelsToFetch) {
         const rows = await getFuelHistory(c.env.DB, f, days);
