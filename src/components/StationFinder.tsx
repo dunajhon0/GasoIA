@@ -471,6 +471,20 @@ export default function StationFinder() {
         }
     }, [city, fuel, brand, sort, order, userPos, radius, onlyFavorites, favorites.size]);
 
+    useEffect(() => {
+        if (typeof window !== 'undefined' && !isFirstRender.current) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('nearby') === '1') {
+                handleFindNearest();
+                // Optional: Clean up parameter without page reload
+                const newParams = new URLSearchParams(window.location.search);
+                newParams.delete('nearby');
+                const newPath = `${window.location.pathname}${newParams.toString() ? '?' + newParams.toString() : ''}`;
+                window.history.replaceState({ path: newPath }, '', newPath);
+            }
+        }
+    }, []);
+
     const toggleFav = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setFavorites(prev => {
